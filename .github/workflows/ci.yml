@@ -19,7 +19,20 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@v0.9.0
         with:
+          # Pinned: pixi.lock is written by this version, and pixi changed how
+          # it hashes source dependencies after it, so a newer pixi rejects the
+          # committed lock with "lock file not up-to-date".
+          pixi-version: v0.71.1
           environments: ${{ matrix.env }}
 
+      # Linux is the interesting leg: pthread_setaffinity_np is a real pin
+      # there (a no-op on macOS), and the pthread symbols come out of libc
+      # rather than libSystem. Both are exercised by the suite.
       - name: Unit tests
         run: pixi run -e ${{ matrix.env }} test
+
+      - name: Demo CLI builds and runs
+        run: |
+          pixi run -e ${{ matrix.env }} cli
+          ./build/threads-mojo info
+          ./build/threads-mojo bench --elements 4000000
