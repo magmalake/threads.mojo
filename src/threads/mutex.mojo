@@ -128,7 +128,7 @@ struct MutexRef(Copyable, ImplicitlyCopyable, Movable):
         """
         return _mutex_trylock(self._blob) == 0
 
-    def with_lock[body: def (OpaquePtr) thin -> None](self, ctx: OpaquePtr):
+    def with_lock[body: def(OpaquePtr) thin -> None](self, ctx: OpaquePtr):
         """Run `body(ctx)` with the mutex held, then release it.
 
         Parameters:
@@ -214,7 +214,7 @@ struct Mutex(Movable):
         """
         return _mutex_trylock(self._blob) == 0
 
-    def with_lock[body: def (OpaquePtr) thin -> None](self, ctx: OpaquePtr):
+    def with_lock[body: def(OpaquePtr) thin -> None](self, ctx: OpaquePtr):
         """Run `body(ctx)` with the mutex held, then release it.
 
         Parameters:

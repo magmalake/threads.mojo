@@ -75,7 +75,7 @@ from .ffi import OpaquePtr, I64Ptr, i64_ptr, opaque_ptr
 from .thread import StartFn, ThreadHandle, num_cpus
 
 
-comptime WorkFn = def (Int, OpaquePtr) thin -> None
+comptime WorkFn = def(Int, OpaquePtr) thin -> None
 """A `parallel_for` task body: takes its task index and the shared context."""
 
 

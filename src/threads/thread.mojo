@@ -39,7 +39,7 @@ from std.sys.info import CompilationTarget
 from .ffi import OpaquePtr, NULL
 
 
-comptime StartFn = def (OpaquePtr) thin -> OpaquePtr
+comptime StartFn = def(OpaquePtr) thin -> OpaquePtr
 """The one callable shape that can cross a thread boundary: a non-capturing
 function taking and returning the opaque context pointer."""
 
@@ -138,9 +138,7 @@ struct ThreadHandle(Movable):
         """
         if self._thread_id == 0:
             return
-        var rc = external_call["pthread_detach", c_int, UInt64](
-            self._thread_id
-        )
+        var rc = external_call["pthread_detach", c_int, UInt64](self._thread_id)
         if rc != c_int(0):
             raise Error("pthread_detach failed, rc=", Int(rc))
         self._thread_id = 0

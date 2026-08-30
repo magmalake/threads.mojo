@@ -51,9 +51,9 @@ def atomic_fetch_add(ptr: I64Ptr, delta: Int64) -> Int64:
         ticket to every caller.
     """
     var res = __mlir_op.`pop.atomic.rmw`[
-        bin_op = __mlir_attr.`#pop<bin_op add>`,
-        ordering = __mlir_attr.`#pop<atomic_ordering seq_cst>`,
-        _type = Int64._mlir_type,
+        bin_op=__mlir_attr.`#pop<bin_op add>`,
+        ordering=__mlir_attr.`#pop<atomic_ordering seq_cst>`,
+        _type=Int64._mlir_type,
     ](
         ptr.unsafe_bitcast[Int64._mlir_type]()._get_kgen_pointer(),
         delta._mlir_value,
@@ -74,10 +74,10 @@ def atomic_load_relaxed(ptr: I64Ptr) -> Int64:
         another thread published.
     """
     var res = __mlir_op.`pop.load`[
-        ordering = __mlir_attr.`#pop<atomic_ordering monotonic>`,
-        isVolatile = False.__mlir_i1__(),
-        isInvariant = False.__mlir_i1__(),
-        isNonTemporal = False.__mlir_i1__(),
+        ordering=__mlir_attr.`#pop<atomic_ordering monotonic>`,
+        isVolatile=False.__mlir_i1__(),
+        isInvariant=False.__mlir_i1__(),
+        isNonTemporal=False.__mlir_i1__(),
     ](ptr.unsafe_bitcast[Int64._mlir_type]()._get_kgen_pointer())
     return Int64(mlir_value=res)
 
@@ -94,10 +94,10 @@ def atomic_load_acquire(ptr: I64Ptr) -> Int64:
         matching `atomic_store_release` is visible afterwards.
     """
     var res = __mlir_op.`pop.load`[
-        ordering = __mlir_attr.`#pop<atomic_ordering acquire>`,
-        isVolatile = False.__mlir_i1__(),
-        isInvariant = False.__mlir_i1__(),
-        isNonTemporal = False.__mlir_i1__(),
+        ordering=__mlir_attr.`#pop<atomic_ordering acquire>`,
+        isVolatile=False.__mlir_i1__(),
+        isInvariant=False.__mlir_i1__(),
+        isNonTemporal=False.__mlir_i1__(),
     ](ptr.unsafe_bitcast[Int64._mlir_type]()._get_kgen_pointer())
     return Int64(mlir_value=res)
 
@@ -111,9 +111,9 @@ def atomic_store_relaxed(ptr: I64Ptr, value: Int64):
         value: The value to write.
     """
     __mlir_op.`pop.store`[
-        ordering = __mlir_attr.`#pop<atomic_ordering monotonic>`,
-        isVolatile = False.__mlir_i1__(),
-        isNonTemporal = False.__mlir_i1__(),
+        ordering=__mlir_attr.`#pop<atomic_ordering monotonic>`,
+        isVolatile=False.__mlir_i1__(),
+        isNonTemporal=False.__mlir_i1__(),
     ](
         value._mlir_value,
         ptr.unsafe_bitcast[Int64._mlir_type]()._get_kgen_pointer(),
@@ -132,9 +132,9 @@ def atomic_store_release(ptr: I64Ptr, value: Int64):
         value: The value to write.
     """
     __mlir_op.`pop.store`[
-        ordering = __mlir_attr.`#pop<atomic_ordering release>`,
-        isVolatile = False.__mlir_i1__(),
-        isNonTemporal = False.__mlir_i1__(),
+        ordering=__mlir_attr.`#pop<atomic_ordering release>`,
+        isVolatile=False.__mlir_i1__(),
+        isNonTemporal=False.__mlir_i1__(),
     ](
         value._mlir_value,
         ptr.unsafe_bitcast[Int64._mlir_type]()._get_kgen_pointer(),
@@ -145,7 +145,7 @@ def atomic_store_release(ptr: I64Ptr, value: Int64):
 def atomic_fence_acquire():
     """A standalone acquire fence."""
     __mlir_op.`pop.fence`[
-        ordering = __mlir_attr.`#pop<atomic_ordering acquire>`,
+        ordering=__mlir_attr.`#pop<atomic_ordering acquire>`,
         _type=None,
     ]()
 
@@ -154,7 +154,7 @@ def atomic_fence_acquire():
 def atomic_fence_release():
     """A standalone release fence."""
     __mlir_op.`pop.fence`[
-        ordering = __mlir_attr.`#pop<atomic_ordering release>`,
+        ordering=__mlir_attr.`#pop<atomic_ordering release>`,
         _type=None,
     ]()
 
