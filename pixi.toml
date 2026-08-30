@@ -1,0 +1,52 @@
+[workspace]
+authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
+channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
+name = "threads.mojo"
+version = "0.1.0"
+description = "Minimal pthreads for Mojo — spawn/join, atomics, a mutex, and parallel_for. No dependencies."
+preview = ["pixi-build"]
+platforms = ["osx-arm64", "linux-64"]
+
+# Pure Mojo + libpthread (libSystem on macOS, libc on modern glibc), so there
+# is nothing to link and nothing to dlopen — consumers just `-I ../threads.mojo/src`.
+# Tests are *built* rather than `mojo run`, because the JIT path and the
+# compiled path have different threading behaviour worth pinning.
+[tasks]
+test = { cmd = "mkdir -p build && mojo build tests/test_threads.mojo -I src -o build/threads-test && ./build/threads-test" }
+cli = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/threads-mojo" }
+bench = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/threads-mojo && ./build/threads-mojo bench" }
+check = { depends-on = ["test", "cli"] }
+fmt = { cmd = "mojo format src tests" }
+format-check = { cmd = "mojo format --check src tests" }
+
+# ── pixi-build: consumable as a pixi source dependency ──────────────────────
+# Conda package name is threads-mojo; the Mojo import stays `from threads import …`.
+[package]
+name = "threads-mojo"
+version = "0.1.0"
+
+[package.build]
+backend = { name = "pixi-build-mojo", version = "0.*" }
+
+[package.build.config.pkg]
+path = "src/threads"
+name = "threads"
+
+[package.host-dependencies]
+mojo-compiler = "==1.0.0"
+
+[package.build-dependencies]
+mojo-compiler = "==1.0.0"
+
+[package.run-dependencies]
+mojo-compiler = ">=1.0.0,<2"
+
+[feature.nightly.dependencies]
+modular = ">=26.6.0.dev2026082605,<27"
+
+[feature.stable.dependencies]
+mojo-compiler = "==1.0.0"
+
+[environments]
+default = ["nightly"]
+stable = ["stable"]
