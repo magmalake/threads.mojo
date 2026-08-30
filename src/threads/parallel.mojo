@@ -89,7 +89,7 @@ comptime _PAR_CELLS: Int = 3
 # ── ThreadGroup ──────────────────────────────────────────────────────────────
 
 
-struct ThreadGroup(Movable):
+struct ThreadGroup(Movable, Sized):
     """A batch of threads spawned together and joined together.
 
     Move-only for the same reason `ThreadHandle` is: the group owns the threads
