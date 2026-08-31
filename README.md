@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/magmalake/threads.mojo/actions/workflows/ci.yml/badge.svg)](https://github.com/magmalake/threads.mojo/actions/workflows/ci.yml)
 
-Part of **magmalake** — data lake building blocks in Mojo.
+Part of [**magmalake**](https://magmalake.org) — data lake building blocks in Mojo.
 
 Minimal OS threads for [Mojo](https://www.modular.com/mojo): spawn and join
 pthreads, share state through atomics and a mutex, and fan a loop out over
