@@ -22,6 +22,14 @@ Works on **Mojo 1.0.0 (stable) and current nightly**, on **linux-64** and
 
 ## Install
 
+```sh
+pixi shelf add threads-mojo
+```
+
+That resolves the tin from [mojoshelf](https://mojoshelf.org) and adds it — along with the tins it depends on — as **pixi git source dependencies**. magmalake tins are not published to a conda channel, so `pixi add threads-mojo` will not find them.
+
+As a dependency declaration, or for a nightly consumer:
+
 ```toml
 # pixi.toml
 [dependencies]
