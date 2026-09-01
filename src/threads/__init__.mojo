@@ -8,9 +8,10 @@ standard library and the pthread symbols every libc already exports.
 from threads import parallel_for, num_cpus, OpaquePtr, AtomicCounter
 ```
 
-Start with `threads.parallel` for the `parallel_for` contract, `threads.thread`
-for the thread and send-contract rules, and `threads.atomic` for why this tin
-does not simply re-export `std.atomic`.
+Start with `threads.parallel` for the `parallel_for` contract, `threads.pool`
+for long-lived workers that run until stopped, `threads.thread` for the thread
+and send-contract rules, and `threads.atomic` for why this tin does not simply
+re-export `std.atomic`.
 """
 
 from .atomic import (
@@ -39,6 +40,10 @@ from .parallel import (
     join_all,
     parallel_for,
     spawn_n,
+)
+from .pool import (
+    WorkerFn,
+    WorkerPool,
 )
 from .thread import (
     StartFn,

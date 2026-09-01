@@ -12,7 +12,7 @@ are named at the top of each test.
 """
 
 from std.memory import alloc
-from std.testing import TestSuite, assert_equal, assert_true
+from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from std.sys.info import CompilationTarget
 from std.time import perf_counter_ns
 
@@ -26,6 +26,7 @@ from threads import (
     OpaquePtr,
     ThreadGroup,
     ThreadHandle,
+    WorkerPool,
     atomic_fetch_add,
     current_thread_id,
     i64_ptr,
@@ -557,7 +558,207 @@ def test_allocator_is_usable_from_many_threads_at_once() raises:
     _free_cells(ctx)
 
 
+# ── WorkerPool ───────────────────────────────────────────────────────────────
+#
+# Context layout for every pool test below, in 64-bit cells:
+#   [0]              shared tick counter, hammered by all workers
+#   [1 .. 1 + n)     one slot per worker, written once as it returns
+#
+# The per-worker slot is what makes "the index each worker receives is unique
+# and covers 0..n-1" a *number* rather than a hope: a duplicate index leaves one
+# slot at 2 and another at 0.
+
+comptime _P_TICKS: Int = 0
+comptime _P_SLOTS: Int = 1
+
+
+def _tick_until_stopped(worker: Int, ctx: OpaquePtr, stop: AtomicFlag) -> None:
+    """Bump the shared counter until the stop flag is set, then claim a slot."""
+    var ticks = AtomicCounter.at(Int(ctx) + _P_TICKS * 8)
+    var cells = i64_ptr(Int(ctx))
+    while not stop.is_set():
+        _ = ticks.fetch_add(1)
+    # Plain write to a slot only this worker touches; the join publishes it.
+    cells[_P_SLOTS + worker] = cells[_P_SLOTS + worker] + 1
+
+
+def _wait_for_ticks(ctx: OpaquePtr, target: Int) -> Int:
+    """Spin (politely) until the tick counter reaches `target` or 5s elapse.
+
+    Returns the counter value observed, so the caller can assert on it rather
+    than on a timeout that may have expired for an unrelated reason.
+    """
+    var ticks = AtomicCounter.at(Int(ctx) + _P_TICKS * 8)
+    var t0 = perf_counter_ns()
+    while perf_counter_ns() - t0 < 5_000_000_000:
+        if Int(ticks.load()) >= target:
+            break
+        yield_now()
+    return Int(ticks.load())
+
+
+def test_worker_pool_runs_until_stopped_then_joins() raises:
+    """Four workers hammer a shared counter; `shutdown()` terminates."""
+    var n = 4
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
+    assert_equal(pool.num_workers(), n)
+    assert_true(not pool.is_stopping())
+    # Insist on real progress first, so "the pool stopped" is not vacuous.
+    var observed = _wait_for_ticks(ctx, 10000)
+    assert_true(
+        observed >= 10000,
+        String("workers only reached ", observed, " ticks in 5s"),
+    )
+    pool.shutdown()
+    assert_true(pool.is_stopping())
+    for i in range(n):
+        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+    _free_cells(ctx)
+
+
+def test_worker_pool_stop_before_any_work_still_joins_cleanly() raises:
+    """`request_stop()` racing the spawns: every worker still returns exactly
+    once, whether it observed the flag on its first check or its millionth."""
+    var n = 8
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
+    pool.request_stop()
+    pool.join()
+    for i in range(n):
+        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+    _free_cells(ctx)
+
+
+def test_worker_pool_indices_are_unique_and_cover_the_range() raises:
+    """16 workers, 16 slots, each written exactly once."""
+    var n = 16
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
+    pool.shutdown()
+    var total = 0
+    for i in range(n):
+        assert_equal(
+            Int(cells[_P_SLOTS + i]),
+            1,
+            String("slot ", i, " was claimed ", Int(cells[_P_SLOTS + i]), "x"),
+        )
+        total += Int(cells[_P_SLOTS + i])
+    assert_equal(total, n)
+    _free_cells(ctx)
+
+
+def test_worker_pool_single_worker() raises:
+    """n = 1: the degenerate pool still starts, ticks, stops, and joins."""
+    var ctx = _cells(2)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_tick_until_stopped](1, ctx)
+    assert_equal(pool.num_workers(), 1)
+    var observed = _wait_for_ticks(ctx, 1000)
+    assert_true(observed >= 1000, String("one worker managed ", observed))
+    pool.shutdown()
+    assert_equal(Int(cells[_P_SLOTS]), 1)
+    _free_cells(ctx)
+
+
+def test_worker_pool_rejects_a_worker_count_below_one() raises:
+    """A pool with no workers is a silent no-op waiting to happen — refuse it
+    rather than hand back something that looks like it is doing work."""
+    var ctx = _cells(2)
+    with assert_raises():
+        var pool = WorkerPool.start[_tick_until_stopped](0, ctx)
+        _ = pool^
+    with assert_raises():
+        var pool = WorkerPool.start[_tick_until_stopped](-3, ctx)
+        _ = pool^
+    _free_cells(ctx)
+
+
+def _always_raises(x: Int) raises -> Int:
+    raise Error("boom in worker ", x)
+
+
+def _fail_and_record(worker: Int, ctx: OpaquePtr, stop: AtomicFlag) -> None:
+    """A worker whose body hits an error and returns without ever consulting
+    the stop flag. `WorkerFn` is non-raising — pthread has no exception
+    channel — so publishing to a cell is the only honest report."""
+    var cells = i64_ptr(Int(ctx))
+    try:
+        _ = _always_raises(worker)
+    except:
+        cells[_P_SLOTS + worker] = 0xBAD
+        return
+    cells[_P_SLOTS + worker] = 1
+
+
+def test_worker_pool_worker_that_fails_does_not_wedge_the_join() raises:
+    """Every worker exits early on an error; `shutdown()` must still return."""
+    var n = 4
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_fail_and_record](n, ctx)
+    pool.shutdown()
+    for i in range(n):
+        assert_equal(Int(cells[_P_SLOTS + i]), 0xBAD)
+    _free_cells(ctx)
+
+
+def test_worker_pool_dropped_without_shutdown_still_stops_and_joins() raises:
+    """The destructor is the safety net: it sets the flag, joins, then frees
+    the header. Without that, freeing the header under live workers would be a
+    use-after-free — and Mojo's last-use destruction makes it easy to reach."""
+    var n = 4
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
+    var observed = _wait_for_ticks(ctx, 1000)
+    assert_true(observed >= 1000, String("workers managed ", observed))
+    _ = pool^  # destroy here, deterministically — no shutdown() call
+    for i in range(n):
+        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+    _free_cells(ctx)
+
+
+def test_worker_pool_stop_flag_can_be_set_by_a_third_party() raises:
+    """`stop_flag()` hands out a view, so anything holding the address — a
+    signal handler, another thread, an FFI callback — can end the pool."""
+    var n = 3
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
+    var observed = _wait_for_ticks(ctx, 1000)
+    assert_true(observed >= 1000, String("workers managed ", observed))
+    # Rebuilt from a bare address, exactly as a stranger would.
+    var elsewhere = AtomicFlag.at(pool.stop_flag().address())
+    assert_true(not elsewhere.is_set())
+    elsewhere.set()
+    pool.join()  # no request_stop() here — the third party already asked
+    for i in range(n):
+        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+    _free_cells(ctx)
+
+
 # ── stress ───────────────────────────────────────────────────────────────────
+
+
+def test_stress_fifty_worker_pools() raises:
+    """50 pools of 4, started and shut down back to back. Catches a leaked
+    header, a leaked pthread handle, or a join that only works the first time.
+    """
+    var n = 4
+    var ctx = _cells(1 + n)
+    var cells = i64_ptr(Int(ctx))
+    for _ in range(50):
+        for i in range(1 + n):
+            cells[i] = 0
+        var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
+        pool.shutdown()
+        for i in range(n):
+            assert_equal(Int(cells[_P_SLOTS + i]), 1)
+    _free_cells(ctx)
 
 
 def test_stress_five_hundred_sequential_threads() raises:

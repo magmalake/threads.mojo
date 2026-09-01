@@ -7,10 +7,10 @@
 Part of [**magmalake**](https://magmalake.org) — data lake building blocks in Mojo.
 
 Minimal OS threads for [Mojo](https://www.modular.com/mojo): spawn and join
-pthreads, share state through atomics and a mutex, and fan a loop out over
-cores with `parallel_for`. No dependencies — the Mojo standard library and the
-pthread symbols every libc already exports, nothing else. No `dlopen`, no C
-shim, no build step.
+pthreads, share state through atomics and a mutex, fan a loop out over cores
+with `parallel_for`, and keep long-lived workers running with `WorkerPool`. No
+dependencies — the Mojo standard library and the pthread symbols every libc
+already exports, nothing else. No `dlopen`, no C shim, no build step.
 
 It exists because Mojo currently ships no way to use more than one core from
 Mojo code: `parallelize` was removed from `std.algorithm`, and no thread pool
@@ -98,10 +98,68 @@ from threads import (
     num_cpus, current_thread_id, yield_now,
     AtomicCounter, AtomicFlag,
     Mutex, MutexRef, CondVar, CondVarRef,
-    parallel_for,
+    parallel_for, WorkerPool,
     OpaquePtr, i64_ptr, opaque_ptr,
 )
 ```
+
+### `threads.pool`
+
+`parallel_for` fits a **bounded** set of indices: hand out tasks, drain the
+queue, join. A server is the other shape — the work never runs out, and each
+worker loops on its own until something says stop. `WorkerPool` is that shape:
+`spawn_n` + `AtomicFlag` + `ThreadGroup.join_all()` bundled so callers stop
+re-deriving the header layout and the free-after-join rule. It is deliberately
+thin — no queue, no task type, no scheduler.
+
+```mojo
+from threads import AtomicCounter, AtomicFlag, OpaquePtr, WorkerPool
+
+def serve(worker: Int, ctx: OpaquePtr, stop: AtomicFlag) -> None:
+    while not stop.is_set():
+        handle_one_request(ctx)      # whatever `ctx` addresses
+
+def main() raises:
+    var pool = WorkerPool.start[serve](n=8, ctx=my_ctx)
+    wait_for_sigint()
+    pool.shutdown()                  # request_stop + join
+```
+
+| item | signature | notes |
+|---|---|---|
+| `WorkerFn` | `def(Int, OpaquePtr, AtomicFlag) thin -> None` | worker index, shared context, stop flag |
+| `WorkerPool.start` | `start[work: WorkerFn](n, ctx) raises -> WorkerPool` | `n >= 1` (a zero-worker pool is refused, not silently created); an `n`-less overload uses `num_cpus()` |
+| `.request_stop()` | `-> None` | release-store to the flag; returns immediately |
+| `.join()` | `(mut self) raises` | joins every worker; does **not** set the flag |
+| `.shutdown()` | `(mut self) raises` | `request_stop` then `join` |
+| `.num_workers()` / `.is_stopping()` / `.stop_flag()` | | `stop_flag()` is a view, so a third party holding its `address()` can end the pool |
+| `.pin_all()` | `raises` | worker `i` to CPU `i % num_cpus()` (a no-op on macOS) |
+
+Workers are **symmetric**: every one runs the same body, and the index exists
+only so a worker can address its own slot in your context. It is drawn from an
+atomic counter at thread start, not baked in.
+
+Two things about the stop flag that have surprised people, both of them
+consequences of it being cooperative rather than preemptive:
+
+- **A worker blocked in a syscall does not observe the flag until that syscall
+  returns.** A thread parked in `recv`, `accept`, or a blocking FFI call stays
+  parked; `request_stop()` does not interrupt it. If your workers block, the
+  thing they block on needs its own wake mechanism — a sentinel, a closed
+  channel, a timeout — and the flag is only the second half of the handshake.
+  ([restate.mojo](https://github.com/winding-lines/restate.mojo)'s served mode
+  is the worked example: its Rust shim grew an `rst_stop` for exactly this.)
+- **A worker that never checks the flag never stops**, so `join()` never
+  returns. Loop on `not stop.is_set()`.
+
+Lifetimes are handled rather than documented-at: the pool heap-allocates one
+small header (index counter, stop cell, user-context address), and its
+destructor sets the flag, joins, and only then frees. Dropping a pool without
+calling `shutdown()` is therefore safe — which matters, because Mojo destroys a
+value at its **last use**, so a pool whose last mention is `request_stop()` is
+destroyed on that line and the destructor's join is what keeps the header alive
+under the still-running workers. Your `ctx` is not owned by the pool and must
+outlive it; since the destructor joins, outliving the pool *value* is enough.
 
 ### `threads.parallel`
 
@@ -249,7 +307,7 @@ $ pixi run test              # nightly
 $ pixi run -e stable test    # Mojo 1.0.0
 ```
 
-26 tests on each environment, on both platforms. The load-bearing ones are the
+35 tests on each environment, on both platforms. The load-bearing ones are the
 races, each written so a broken primitive produces a *wrong number* rather than
 a flake:
 
@@ -264,8 +322,15 @@ a flake:
   and `String`s concurrently, 64 tasks × 20 rounds each. Every worker in this
   library rests on the Mojo runtime allocator being usable from several threads
   at once; this test is the evidence, and it passes on all four CI legs.
+- **`WorkerPool`** — nine tests: workers that tick a shared counter until
+  stopped and then join; `request_stop()` racing the spawns; the 16 indices
+  each claimed exactly once (a duplicate leaves one slot at 2 and another at
+  0); `n = 1`; `n < 1` refused; a worker that fails and returns without ever
+  consulting the flag still joins; a pool destroyed without `shutdown()` still
+  stops, joins, and frees in that order; and a third party setting the flag
+  through `stop_flag().address()`.
 - **Stress** — 500 sequential spawn/joins, 50 back-to-back `parallel_for`
-  rounds.
+  rounds, 50 `WorkerPool`s started and shut down back to back.
 
 ## Credits and license
 
