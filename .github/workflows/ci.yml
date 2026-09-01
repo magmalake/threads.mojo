@@ -22,7 +22,7 @@ jobs:
           # Pinned: pixi.lock is written by this version, and pixi changed how
           # it hashes source dependencies after it, so a newer pixi rejects the
           # committed lock with "lock file not up-to-date".
-          pixi-version: v0.71.1
+          pixi-version: v0.78.0
           environments: ${{ matrix.env }}
 
       # Linux is the interesting leg: pthread_setaffinity_np is a real pin
