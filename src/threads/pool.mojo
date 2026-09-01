@@ -277,7 +277,7 @@ struct WorkerPool(Movable):
         """
         self._group.pin_all()
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         """Stop, join, then free the header — in that order, always.
 
         A pool that is simply dropped still shuts down cleanly. Freeing the

@@ -10,7 +10,7 @@ Mojo value — which matters, because the address is what the worker threads see
 ## Owning vs. viewing
 
 `Mutex` owns its blob: it initialises on construction, destroys and frees in
-`__del__`, and is move-only so there is exactly one owner. But a mutex is
+`__deinit__`, and is move-only so there is exactly one owner. But a mutex is
 useless unless several threads reach the *same* one, and threads only get a raw
 context pointer. So `Mutex.address()` hands out the blob address and
 `MutexRef.at(address)` rebuilds a lock/unlock view on the worker side. The view
@@ -20,7 +20,7 @@ is copyable and owns nothing.
 
 The obvious `with_lock` / RAII `Guard` is deliberately missing. Mojo destroys a
 value at its **last use**, not at the end of its scope, so a guard whose only
-job is to unlock in `__del__` gets destroyed — and therefore unlocks — at the
+job is to unlock in `__deinit__` gets destroyed — and therefore unlocks — at the
 point you stop mentioning it, which is usually the first line of the critical
 section. That is a silent correctness bug, not a compile error. Call `lock()`
 and `unlock()` explicitly, or use `with_lock`, which takes a thin function and
