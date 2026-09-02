@@ -17,7 +17,11 @@ cli = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/thread
 bench = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/threads-mojo && ./build/threads-mojo bench" }
 check = { depends-on = ["test", "cli"] }
 fmt = { cmd = "mojo format src tests" }
-format-check = { cmd = "mojo format --check src tests" }
+# `mojo format` has no check mode in 1.0.0 — it rejects `--check`, and there is
+# none among the hidden options either — so the check is: format, then assert the
+# tree did not move. It rewrites the files as a side effect, which is what CI
+# wants and is harmless locally; run it with your own work committed or stashed.
+format-check = { cmd = "mojo format src tests && git diff --exit-code -- src tests" }
 
 # ── pixi-build: consumable as a pixi source dependency ──────────────────────
 # Conda package name is threads-mojo; the Mojo import stays `from threads import …`.
