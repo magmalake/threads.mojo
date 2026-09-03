@@ -28,7 +28,7 @@ brackets it properly.
 """
 
 from std.ffi import external_call, c_int
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 
 from .ffi import OpaquePtr, NULL
 
@@ -40,7 +40,7 @@ glibc / musl / macOS on x86-64 and aarch64."""
 comptime COND_BYTES: Int = 64
 """Size of the opaque `pthread_cond_t` blob."""
 
-comptime BlobPtr = UnsafePointer[UInt8, MutUntrackedOrigin]
+comptime BlobPtr = Pointer[UInt8, MutUntrackedOrigin]
 
 
 # ── raw pthread_mutex_t operations on a blob address ─────────────────────────
@@ -163,9 +163,9 @@ struct Mutex(Movable):
         Raises:
             Error: If `pthread_mutex_init` fails.
         """
-        self._blob = alloc[UInt8](MUTEX_BYTES)
+        self._blob = unsafe_alloc[UInt8](MUTEX_BYTES)
         for i in range(MUTEX_BYTES):
-            self._blob[i] = 0
+            self._blob[unsafe_offset=i] = 0
         var rc = _mutex_init(self._blob)
         if rc != 0:
             self._blob.unsafe_free()
@@ -292,9 +292,9 @@ struct CondVar(Movable):
         Raises:
             Error: If `pthread_cond_init` fails.
         """
-        self._blob = alloc[UInt8](COND_BYTES)
+        self._blob = unsafe_alloc[UInt8](COND_BYTES)
         for i in range(COND_BYTES):
-            self._blob[i] = 0
+            self._blob[unsafe_offset=i] = 0
         var rc = external_call["pthread_cond_init", c_int, BlobPtr, Int](
             self._blob, NULL
         )

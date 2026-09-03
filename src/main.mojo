@@ -17,7 +17,7 @@ $ threads-mojo info
   measuring the wrong thing.
 """
 
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 from std.sys import argv
 from std.time import perf_counter_ns
 
@@ -64,23 +64,27 @@ def _chunk_bounds(i: Int, n: Int, chunks: Int) -> Tuple[Int, Int]:
 def _sum_chunk(i: Int, ctx: OpaquePtr) -> None:
     """Sum one slice of the source array into this task's own partial slot."""
     var cells = i64_ptr(Int(ctx))
-    var src = i64_ptr(Int(cells[C_SRC]))
-    var partials = i64_ptr(Int(cells[C_PARTIALS]))
-    var bounds = _chunk_bounds(i, Int(cells[C_N]), Int(cells[C_CHUNKS]))
+    var src = i64_ptr(Int(cells[unsafe_offset=C_SRC]))
+    var partials = i64_ptr(Int(cells[unsafe_offset=C_PARTIALS]))
+    var bounds = _chunk_bounds(
+        i, Int(cells[unsafe_offset=C_N]), Int(cells[unsafe_offset=C_CHUNKS])
+    )
     var total = Int64(0)
     for k in range(bounds[0], bounds[1]):
-        total += src[k]
-    partials[i] = total
+        total += src[unsafe_offset=k]
+    partials[unsafe_offset=i] = total
 
 
 def _copy_chunk(i: Int, ctx: OpaquePtr) -> None:
     """Copy one slice of the source array into the destination."""
     var cells = i64_ptr(Int(ctx))
-    var src = i64_ptr(Int(cells[C_SRC]))
-    var dst = i64_ptr(Int(cells[C_DST]))
-    var bounds = _chunk_bounds(i, Int(cells[C_N]), Int(cells[C_CHUNKS]))
+    var src = i64_ptr(Int(cells[unsafe_offset=C_SRC]))
+    var dst = i64_ptr(Int(cells[unsafe_offset=C_DST]))
+    var bounds = _chunk_bounds(
+        i, Int(cells[unsafe_offset=C_N]), Int(cells[unsafe_offset=C_CHUNKS])
+    )
     for k in range(bounds[0], bounds[1]):
-        dst[k] = src[k]
+        dst[unsafe_offset=k] = src[unsafe_offset=k]
 
 
 def _pad(text: String, width: Int) -> String:
@@ -131,28 +135,28 @@ def run_bench(max_workers: Int, n: Int) raises:
     print("  elements     :", n, "Int64 (", n * 8 // (1 << 20), "MiB )")
     print()
 
-    var src = alloc[Int64](n)
-    var dst = alloc[Int64](n)
+    var src = unsafe_alloc[Int64](n)
+    var dst = unsafe_alloc[Int64](n)
     for i in range(n):
-        src[i] = Int64(i & 0xFFFF)
-        dst[i] = 0
+        src[unsafe_offset=i] = Int64(i & 0xFFFF)
+        dst[unsafe_offset=i] = 0
 
-    var block = alloc[Int64](CTX_CELLS)
+    var block = unsafe_alloc[Int64](CTX_CELLS)
     var ctx = opaque_ptr(Int(block))
     var cells = i64_ptr(Int(block))
-    cells[C_SRC] = Int64(Int(src))
-    cells[C_DST] = Int64(Int(dst))
-    cells[C_N] = Int64(n)
-    cells[C_UNUSED] = 0
+    cells[unsafe_offset=C_SRC] = Int64(Int(src))
+    cells[unsafe_offset=C_DST] = Int64(Int(dst))
+    cells[unsafe_offset=C_N] = Int64(n)
+    cells[unsafe_offset=C_UNUSED] = 0
 
     # Four tasks per worker: enough to hide any straggler, few enough that the
     # one atomic per task is invisible.
     var max_chunks = max_workers * 4
-    var partials = alloc[Int64](max_chunks)
-    cells[C_PARTIALS] = Int64(Int(partials))
+    var partials = unsafe_alloc[Int64](max_chunks)
+    cells[unsafe_offset=C_PARTIALS] = Int64(Int(partials))
 
     # Warm the pages so the first row is not paying for first touch.
-    cells[C_CHUNKS] = Int64(max_chunks)
+    cells[unsafe_offset=C_CHUNKS] = Int64(max_chunks)
     parallel_for[_sum_chunk](max_chunks, ctx, num_workers=max_workers)
 
     print("  parallel sum over", n, "Int64")
@@ -163,13 +167,13 @@ def run_bench(max_workers: Int, n: Int) raises:
     for step in range(len(steps)):
         var workers = steps[step]
         var chunks = workers * 4
-        cells[C_CHUNKS] = Int64(chunks)
+        cells[unsafe_offset=C_CHUNKS] = Int64(chunks)
         var t0 = perf_counter_ns()
         parallel_for[_sum_chunk](chunks, ctx, num_workers=workers)
         var t1 = perf_counter_ns()
         var total = Int64(0)
         for i in range(chunks):
-            total += partials[i]
+            total += partials[unsafe_offset=i]
         if workers == 1:
             base_ns = t1 - t0
             expected = total
@@ -189,7 +193,7 @@ def run_bench(max_workers: Int, n: Int) raises:
     for step in range(len(steps)):
         var workers = steps[step]
         var chunks = workers * 4
-        cells[C_CHUNKS] = Int64(chunks)
+        cells[unsafe_offset=C_CHUNKS] = Int64(chunks)
         var t0 = perf_counter_ns()
         parallel_for[_copy_chunk](chunks, ctx, num_workers=workers)
         var t1 = perf_counter_ns()
@@ -205,7 +209,7 @@ def run_bench(max_workers: Int, n: Int) raises:
             _pad(_two_dp(gb_per_s), 8),
         )
     for i in range(0, n, max(1, n // 16)):
-        if dst[i] != src[i]:
+        if dst[unsafe_offset=i] != src[unsafe_offset=i]:
             raise Error("parallel memcpy produced a wrong byte at ", i)
     print()
     print("  (memcpy is bandwidth bound — it is here to show where scaling")

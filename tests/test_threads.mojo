@@ -11,7 +11,7 @@ that is the only thing a thread start routine can be handed. The cell indices
 are named at the top of each test.
 """
 
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
 from std.sys.info import CompilationTarget
 from std.time import perf_counter_ns
@@ -44,9 +44,9 @@ from threads import (
 
 def _cells(n: Int) -> OpaquePtr:
     """Allocate `n` zeroed 64-bit cells and return them as an opaque block."""
-    var block = alloc[Int64](n)
+    var block = unsafe_alloc[Int64](n)
     for i in range(n):
-        block[i] = 0
+        block[unsafe_offset=i] = 0
     return opaque_ptr(Int(block))
 
 
@@ -72,8 +72,8 @@ def _spin_ns(duration: Int):
 def _write_marker(arg: OpaquePtr) -> OpaquePtr:
     """cells: [0] marker, [1] thread id observed inside the thread."""
     var cells = i64_ptr(Int(arg))
-    cells[0] = 0xC0FFEE
-    cells[1] = Int64(Int(current_thread_id()))
+    cells[unsafe_offset=0] = 0xC0FFEE
+    cells[unsafe_offset=1] = Int64(Int(current_thread_id()))
     return arg
 
 
@@ -84,7 +84,7 @@ def test_spawn_join_round_trip() raises:
     var t = ThreadHandle.spawn[_write_marker](ctx)
     assert_true(t.is_joinable())
     t.join()
-    assert_equal(Int(cells[0]), 0xC0FFEE)
+    assert_equal(Int(cells[unsafe_offset=0]), 0xC0FFEE)
     _free_cells(ctx)
 
 
@@ -94,7 +94,7 @@ def test_thread_really_is_another_thread() raises:
     var cells = i64_ptr(Int(ctx))
     var t = ThreadHandle.spawn[_write_marker](ctx)
     t.join()
-    assert_true(Int(cells[1]) != Int(current_thread_id()))
+    assert_true(Int(cells[unsafe_offset=1]) != Int(current_thread_id()))
     _free_cells(ctx)
 
 
@@ -114,7 +114,7 @@ def test_double_join_is_a_no_op() raises:
 def _bump_own_slot(arg: OpaquePtr) -> OpaquePtr:
     """Each thread gets its own cell via `spawn_n`'s stride."""
     var cells = i64_ptr(Int(arg))
-    cells[0] = cells[0] + 1
+    cells[unsafe_offset=0] = cells[unsafe_offset=0] + 1
     return arg
 
 
@@ -128,7 +128,7 @@ def test_sixteen_threads_each_get_their_own_slot() raises:
     assert_equal(len(group), n)
     join_all(group)
     for i in range(n):
-        assert_equal(Int(cells[i]), 1)
+        assert_equal(Int(cells[unsafe_offset=i]), 1)
     _free_cells(ctx)
 
 
@@ -144,7 +144,7 @@ def test_pin_to_cpu() raises:
     var t = ThreadHandle.spawn[_write_marker](ctx)
     t.pin_to_cpu(0)
     t.join()
-    assert_equal(Int(cells[0]), 0xC0FFEE)
+    assert_equal(Int(cells[unsafe_offset=0]), 0xC0FFEE)
     _free_cells(ctx)
 
 
@@ -156,7 +156,7 @@ def test_pin_all_in_a_group() raises:
     group.pin_all()
     group.join_all()
     for i in range(n):
-        assert_equal(Int(cells[i]), 1)
+        assert_equal(Int(cells[unsafe_offset=i]), 1)
     _free_cells(ctx)
 
 
@@ -179,7 +179,7 @@ def _hammer_counter(arg: OpaquePtr) -> OpaquePtr:
     """cells: [0] the counter, [1] iterations."""
     var cells = i64_ptr(Int(arg))
     var counter = AtomicCounter.at(Int(arg))
-    var iterations = Int(cells[1])
+    var iterations = Int(cells[unsafe_offset=1])
     for _ in range(iterations):
         _ = counter.fetch_add(1)
     return arg
@@ -195,10 +195,10 @@ def test_atomic_counter_under_eight_threads() raises:
     var iterations = 100_000
     var ctx = _cells(2)
     var cells = i64_ptr(Int(ctx))
-    cells[1] = Int64(iterations)
+    cells[unsafe_offset=1] = Int64(iterations)
     var group = spawn_n[_hammer_counter](threads, ctx)
     group.join_all()
-    assert_equal(Int(cells[0]), threads * iterations)
+    assert_equal(Int(cells[unsafe_offset=0]), threads * iterations)
     _free_cells(ctx)
 
 
@@ -208,7 +208,7 @@ def _publish_then_flag(arg: OpaquePtr) -> OpaquePtr:
     var cells = i64_ptr(Int(arg))
     var flag = AtomicFlag.at(Int(arg))
     # A plain, non-atomic write. Only the release store below makes it visible.
-    cells[1] = 0x5EEDBEEF
+    cells[unsafe_offset=1] = 0x5EEDBEEF
     flag.set()
     return arg
 
@@ -223,7 +223,7 @@ def _observe_flag(arg: OpaquePtr) -> OpaquePtr:
         if spins > 100_000_000:
             return arg  # bail rather than hang the suite
     _ = atomic_fetch_add(i64_ptr(Int(arg) + 3 * 8), 1)
-    if cells[1] == 0x5EEDBEEF:
+    if cells[unsafe_offset=1] == 0x5EEDBEEF:
         _ = atomic_fetch_add(i64_ptr(Int(arg) + 2 * 8), 1)
     return arg
 
@@ -238,8 +238,8 @@ def test_atomic_flag_release_acquire_visibility() raises:
     var writer = ThreadHandle.spawn[_publish_then_flag](ctx)
     writer.join()
     observers.join_all()
-    assert_equal(Int(cells[3]), readers)
-    assert_equal(Int(cells[2]), readers)
+    assert_equal(Int(cells[unsafe_offset=3]), readers)
+    assert_equal(Int(cells[unsafe_offset=2]), readers)
     _free_cells(ctx)
 
 
@@ -270,13 +270,13 @@ def test_atomic_flag_and_counter_standalone_cells() raises:
 def _guarded_increment(arg: OpaquePtr) -> OpaquePtr:
     """cells: [0] mutex address, [1] a plain Int, [2] iterations."""
     var cells = i64_ptr(Int(arg))
-    var mutex = MutexRef.at(Int(cells[0]))
-    var iterations = Int(cells[2])
+    var mutex = MutexRef.at(Int(cells[unsafe_offset=0]))
+    var iterations = Int(cells[unsafe_offset=2])
     for _ in range(iterations):
         mutex.lock()
         # Deliberately a plain, non-atomic read-modify-write. The mutex is the
         # only thing making this correct.
-        cells[1] = cells[1] + 1
+        cells[unsafe_offset=1] = cells[unsafe_offset=1] + 1
         mutex.unlock()
     return arg
 
@@ -288,11 +288,11 @@ def test_mutex_gives_mutual_exclusion() raises:
     var mutex = Mutex()
     var ctx = _cells(3)
     var cells = i64_ptr(Int(ctx))
-    cells[0] = Int64(mutex.address())
-    cells[2] = Int64(iterations)
+    cells[unsafe_offset=0] = Int64(mutex.address())
+    cells[unsafe_offset=2] = Int64(iterations)
     var group = spawn_n[_guarded_increment](threads, ctx)
     group.join_all()
-    assert_equal(Int(cells[1]), threads * iterations)
+    assert_equal(Int(cells[unsafe_offset=1]), threads * iterations)
     _free_cells(ctx)
     # Mention the mutex after the join so last-use destruction cannot free it
     # while a worker still holds a MutexRef to it.
@@ -303,14 +303,14 @@ def _time_a_blocked_lock(arg: OpaquePtr) -> OpaquePtr:
     """cells: [0] mutex address, [1] nanoseconds spent blocked, [2] ready flag.
     """
     var cells = i64_ptr(Int(arg))
-    var mutex = MutexRef.at(Int(cells[0]))
+    var mutex = MutexRef.at(Int(cells[unsafe_offset=0]))
     var ready = AtomicFlag.at(Int(arg) + 2 * 8)
     ready.set()
     var t0 = perf_counter_ns()
     mutex.lock()
     var t1 = perf_counter_ns()
     mutex.unlock()
-    cells[1] = Int64(t1 - t0)
+    cells[unsafe_offset=1] = Int64(t1 - t0)
     return arg
 
 
@@ -325,7 +325,7 @@ def test_mutex_actually_blocks() raises:
     var mutex = Mutex()
     var ctx = _cells(3)
     var cells = i64_ptr(Int(ctx))
-    cells[0] = Int64(mutex.address())
+    cells[unsafe_offset=0] = Int64(mutex.address())
     var ready = AtomicFlag.at(Int(ctx) + 2 * 8)
 
     mutex.lock()
@@ -338,8 +338,8 @@ def test_mutex_actually_blocks() raises:
     t.join()
 
     assert_true(
-        Int(cells[1]) > 10_000_000,
-        String("waiter was blocked only ", Int(cells[1]), " ns"),
+        Int(cells[unsafe_offset=1]) > 10_000_000,
+        String("waiter was blocked only ", Int(cells[unsafe_offset=1]), " ns"),
     )
     _free_cells(ctx)
     assert_true(mutex.address() != 0)
@@ -355,14 +355,14 @@ def test_mutex_try_lock() raises:
 
 
 def _set_to_five(ctx: OpaquePtr) -> None:
-    i64_ptr(Int(ctx))[0] = 5
+    i64_ptr(Int(ctx))[unsafe_offset=0] = 5
 
 
 def test_mutex_with_lock() raises:
     var mutex = Mutex()
     var ctx = _cells(1)
     mutex.with_lock[_set_to_five](ctx)
-    assert_equal(Int(i64_ptr(Int(ctx))[0]), 5)
+    assert_equal(Int(i64_ptr(Int(ctx))[unsafe_offset=0]), 5)
     # The mutex must be free again afterwards.
     assert_true(mutex.try_lock())
     mutex.unlock()
@@ -375,12 +375,12 @@ def test_mutex_with_lock() raises:
 def _wait_for_predicate(arg: OpaquePtr) -> OpaquePtr:
     """cells: [0] mutex address, [1] cond address, [2] predicate, [3] result."""
     var cells = i64_ptr(Int(arg))
-    var mutex = MutexRef.at(Int(cells[0]))
-    var cond = CondVarRef.at(Int(cells[1]))
+    var mutex = MutexRef.at(Int(cells[unsafe_offset=0]))
+    var cond = CondVarRef.at(Int(cells[unsafe_offset=1]))
     mutex.lock()
-    while cells[2] == 0:
+    while cells[unsafe_offset=2] == 0:
         cond.wait(mutex)
-    cells[3] = cells[2] * 2
+    cells[unsafe_offset=3] = cells[unsafe_offset=2] * 2
     mutex.unlock()
     return arg
 
@@ -390,16 +390,16 @@ def test_condvar_wait_and_signal() raises:
     var cond = CondVar()
     var ctx = _cells(4)
     var cells = i64_ptr(Int(ctx))
-    cells[0] = Int64(mutex.address())
-    cells[1] = Int64(cond.address())
+    cells[unsafe_offset=0] = Int64(mutex.address())
+    cells[unsafe_offset=1] = Int64(cond.address())
     var t = ThreadHandle.spawn[_wait_for_predicate](ctx)
     _spin_ns(2_000_000)
     mutex.lock()
-    cells[2] = 21
+    cells[unsafe_offset=2] = 21
     cond.signal()
     mutex.unlock()
     t.join()
-    assert_equal(Int(cells[3]), 42)
+    assert_equal(Int(cells[unsafe_offset=3]), 42)
     _free_cells(ctx)
     assert_true(mutex.address() != 0 and cond.address() != 0)
 
@@ -409,7 +409,7 @@ def test_condvar_wait_and_signal() raises:
 
 def _square_into_slot(i: Int, ctx: OpaquePtr) -> None:
     """cells[i] = i*i. One cell per task, so no synchronisation is needed."""
-    i64_ptr(Int(ctx))[i] = Int64(i * i)
+    i64_ptr(Int(ctx))[unsafe_offset=i] = Int64(i * i)
 
 
 def test_parallel_for_covers_every_index_exactly_once() raises:
@@ -420,7 +420,7 @@ def test_parallel_for_covers_every_index_exactly_once() raises:
     parallel_for[_square_into_slot](n, ctx)
     var total = 0
     for i in range(n):
-        assert_equal(Int(cells[i]), i * i)
+        assert_equal(Int(cells[unsafe_offset=i]), i * i)
         total += i * i
     assert_true(total > 0)
     _free_cells(ctx)
@@ -439,8 +439,8 @@ def test_parallel_for_task_count_and_index_sum() raises:
     var ctx = _cells(2)
     var cells = i64_ptr(Int(ctx))
     parallel_for[_bump_shared_counter](n, ctx, num_workers=8)
-    assert_equal(Int(cells[0]), n)
-    assert_equal(Int(cells[1]), (n - 1) * n // 2)
+    assert_equal(Int(cells[unsafe_offset=0]), n)
+    assert_equal(Int(cells[unsafe_offset=1]), (n - 1) * n // 2)
     _free_cells(ctx)
 
 
@@ -449,7 +449,7 @@ def test_parallel_for_with_zero_tasks_does_nothing() raises:
     var cells = i64_ptr(Int(ctx))
     parallel_for[_bump_shared_counter](0, ctx)
     parallel_for[_bump_shared_counter](-5, ctx)
-    assert_equal(Int(cells[0]), 0)
+    assert_equal(Int(cells[unsafe_offset=0]), 0)
     _free_cells(ctx)
 
 
@@ -459,10 +459,10 @@ def test_parallel_for_with_fewer_tasks_than_workers() raises:
     var ctx = _cells(8)
     var cells = i64_ptr(Int(ctx))
     parallel_for[_square_into_slot](3, ctx, num_workers=64)
-    assert_equal(Int(cells[0]), 0)
-    assert_equal(Int(cells[1]), 1)
-    assert_equal(Int(cells[2]), 4)
-    assert_equal(Int(cells[3]), 0)
+    assert_equal(Int(cells[unsafe_offset=0]), 0)
+    assert_equal(Int(cells[unsafe_offset=1]), 1)
+    assert_equal(Int(cells[unsafe_offset=2]), 4)
+    assert_equal(Int(cells[unsafe_offset=3]), 0)
     _free_cells(ctx)
 
 
@@ -472,7 +472,7 @@ def test_parallel_for_single_worker() raises:
     var cells = i64_ptr(Int(ctx))
     parallel_for[_square_into_slot](n, ctx, num_workers=1)
     for i in range(n):
-        assert_equal(Int(cells[i]), i * i)
+        assert_equal(Int(cells[unsafe_offset=i]), i * i)
     _free_cells(ctx)
 
 
@@ -482,7 +482,7 @@ def _touch_ctx_late(i: Int, ctx: OpaquePtr) -> None:
     var t0 = perf_counter_ns()
     while perf_counter_ns() - t0 < 1_000_000:
         pass
-    i64_ptr(Int(ctx))[i] = Int64(i + 1)
+    i64_ptr(Int(ctx))[unsafe_offset=i] = Int64(i + 1)
 
 
 def test_parallel_for_context_outlives_the_join() raises:
@@ -493,7 +493,7 @@ def test_parallel_for_context_outlives_the_join() raises:
     var cells = i64_ptr(Int(ctx))
     parallel_for[_touch_ctx_late](n, ctx, num_workers=8)
     for i in range(n):
-        assert_equal(Int(cells[i]), i + 1)
+        assert_equal(Int(cells[unsafe_offset=i]), i + 1)
     _free_cells(ctx)
 
 
@@ -501,7 +501,7 @@ def _fail_on_odd(i: Int, ctx: OpaquePtr) -> None:
     """The documented error-cell pattern: cells[0] is a flag, cells[1+i] is a
     per-task error code."""
     if i % 2 == 1:
-        i64_ptr(Int(ctx))[1 + i] = Int64(100 + i)
+        i64_ptr(Int(ctx))[unsafe_offset=1 + i] = Int64(100 + i)
         AtomicFlag.at(Int(ctx)).set()
 
 
@@ -514,8 +514,8 @@ def test_parallel_for_error_cell_pattern() raises:
     assert_true(AtomicFlag.at(Int(ctx)).is_set())
     var failures = 0
     for i in range(n):
-        if cells[1 + i] != 0:
-            assert_equal(Int(cells[1 + i]), 100 + i)
+        if cells[unsafe_offset=1 + i] != 0:
+            assert_equal(Int(cells[unsafe_offset=1 + i]), 100 + i)
             failures += 1
     assert_equal(failures, 4)
     _free_cells(ctx)
@@ -540,7 +540,7 @@ def _allocate_and_free(i: Int, ctx: OpaquePtr) -> None:
         for k in range(8):
             s += String(items[k])
         total += len(items) + s.byte_length()
-    i64_ptr(Int(ctx))[i] = Int64(total)
+    i64_ptr(Int(ctx))[unsafe_offset=i] = Int64(total)
 
 
 def test_allocator_is_usable_from_many_threads_at_once() raises:
@@ -551,10 +551,10 @@ def test_allocator_is_usable_from_many_threads_at_once() raises:
     parallel_for[_allocate_and_free](n, ctx, num_workers=8)
     for i in range(n):
         assert_true(
-            Int(cells[i]) > 0,
+            Int(cells[unsafe_offset=i]) > 0,
             String("task ", i, " produced no allocation work"),
         )
-        assert_equal(Int(cells[i]), Int(cells[0]))
+        assert_equal(Int(cells[unsafe_offset=i]), Int(cells[unsafe_offset=0]))
     _free_cells(ctx)
 
 
@@ -579,7 +579,9 @@ def _tick_until_stopped(worker: Int, ctx: OpaquePtr, stop: AtomicFlag) -> None:
     while not stop.is_set():
         _ = ticks.fetch_add(1)
     # Plain write to a slot only this worker touches; the join publishes it.
-    cells[_P_SLOTS + worker] = cells[_P_SLOTS + worker] + 1
+    cells[unsafe_offset=_P_SLOTS + worker] = (
+        cells[unsafe_offset=_P_SLOTS + worker] + 1
+    )
 
 
 def _wait_for_ticks(ctx: OpaquePtr, target: Int) -> Int:
@@ -614,7 +616,7 @@ def test_worker_pool_runs_until_stopped_then_joins() raises:
     pool.shutdown()
     assert_true(pool.is_stopping())
     for i in range(n):
-        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+        assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 1)
     _free_cells(ctx)
 
 
@@ -628,7 +630,7 @@ def test_worker_pool_stop_before_any_work_still_joins_cleanly() raises:
     pool.request_stop()
     pool.join()
     for i in range(n):
-        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+        assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 1)
     _free_cells(ctx)
 
 
@@ -642,17 +644,24 @@ def test_worker_pool_indices_are_unique_and_cover_the_range() raises:
     var total = 0
     for i in range(n):
         assert_equal(
-            Int(cells[_P_SLOTS + i]),
+            Int(cells[unsafe_offset=_P_SLOTS + i]),
             1,
-            String("slot ", i, " was claimed ", Int(cells[_P_SLOTS + i]), "x"),
+            String(
+                "slot ",
+                i,
+                " was claimed ",
+                Int(cells[unsafe_offset=_P_SLOTS + i]),
+                "x",
+            ),
         )
-        total += Int(cells[_P_SLOTS + i])
+        total += Int(cells[unsafe_offset=_P_SLOTS + i])
     assert_equal(total, n)
     _free_cells(ctx)
 
 
 def test_worker_pool_single_worker() raises:
-    """n = 1: the degenerate pool still starts, ticks, stops, and joins."""
+    """A one-worker pool is the degenerate case: it still starts, ticks, stops, and joins.
+    """
     var ctx = _cells(2)
     var cells = i64_ptr(Int(ctx))
     var pool = WorkerPool.start[_tick_until_stopped](1, ctx)
@@ -660,7 +669,7 @@ def test_worker_pool_single_worker() raises:
     var observed = _wait_for_ticks(ctx, 1000)
     assert_true(observed >= 1000, String("one worker managed ", observed))
     pool.shutdown()
-    assert_equal(Int(cells[_P_SLOTS]), 1)
+    assert_equal(Int(cells[unsafe_offset=_P_SLOTS]), 1)
     _free_cells(ctx)
 
 
@@ -689,9 +698,9 @@ def _fail_and_record(worker: Int, ctx: OpaquePtr, stop: AtomicFlag) -> None:
     try:
         _ = _always_raises(worker)
     except:
-        cells[_P_SLOTS + worker] = 0xBAD
+        cells[unsafe_offset=_P_SLOTS + worker] = 0xBAD
         return
-    cells[_P_SLOTS + worker] = 1
+    cells[unsafe_offset=_P_SLOTS + worker] = 1
 
 
 def test_worker_pool_worker_that_fails_does_not_wedge_the_join() raises:
@@ -702,7 +711,7 @@ def test_worker_pool_worker_that_fails_does_not_wedge_the_join() raises:
     var pool = WorkerPool.start[_fail_and_record](n, ctx)
     pool.shutdown()
     for i in range(n):
-        assert_equal(Int(cells[_P_SLOTS + i]), 0xBAD)
+        assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 0xBAD)
     _free_cells(ctx)
 
 
@@ -718,7 +727,7 @@ def test_worker_pool_dropped_without_shutdown_still_stops_and_joins() raises:
     assert_true(observed >= 1000, String("workers managed ", observed))
     _ = pool^  # destroy here, deterministically — no shutdown() call
     for i in range(n):
-        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+        assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 1)
     _free_cells(ctx)
 
 
@@ -737,7 +746,7 @@ def test_worker_pool_stop_flag_can_be_set_by_a_third_party() raises:
     elsewhere.set()
     pool.join()  # no request_stop() here — the third party already asked
     for i in range(n):
-        assert_equal(Int(cells[_P_SLOTS + i]), 1)
+        assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 1)
     _free_cells(ctx)
 
 
@@ -753,11 +762,11 @@ def test_stress_fifty_worker_pools() raises:
     var cells = i64_ptr(Int(ctx))
     for _ in range(50):
         for i in range(1 + n):
-            cells[i] = 0
+            cells[unsafe_offset=i] = 0
         var pool = WorkerPool.start[_tick_until_stopped](n, ctx)
         pool.shutdown()
         for i in range(n):
-            assert_equal(Int(cells[_P_SLOTS + i]), 1)
+            assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 1)
     _free_cells(ctx)
 
 
@@ -767,10 +776,10 @@ def test_stress_five_hundred_sequential_threads() raises:
     var ctx = _cells(2)
     var cells = i64_ptr(Int(ctx))
     for _ in range(500):
-        cells[0] = 0
+        cells[unsafe_offset=0] = 0
         var t = ThreadHandle.spawn[_write_marker](ctx)
         t.join()
-        assert_equal(Int(cells[0]), 0xC0FFEE)
+        assert_equal(Int(cells[unsafe_offset=0]), 0xC0FFEE)
     _free_cells(ctx)
 
 
@@ -782,9 +791,9 @@ def test_stress_fifty_parallel_for_rounds() raises:
     var cells = i64_ptr(Int(ctx))
     for _ in range(50):
         for i in range(n + 2):
-            cells[i] = 0
+            cells[unsafe_offset=i] = 0
         parallel_for[_square_into_slot](n, ctx, num_workers=4)
-        assert_equal(Int(cells[n - 1]), (n - 1) * (n - 1))
+        assert_equal(Int(cells[unsafe_offset=n - 1]), (n - 1) * (n - 1))
     _free_cells(ctx)
 
 

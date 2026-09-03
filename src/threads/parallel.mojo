@@ -6,7 +6,7 @@ from threads import parallel_for, OpaquePtr, i64_ptr
 
 def square_chunk(i: Int, ctx: OpaquePtr) -> None:
     var cells = i64_ptr(Int(ctx))
-    cells[i] = cells[i] * cells[i]
+    cells[unsafe_offset=i] = cells[unsafe_offset=i] * cells[unsafe_offset=i]
 
 def main() raises:
     ...
@@ -68,7 +68,7 @@ visible to the caller; the join at the end of `parallel_for` also gives you
 that, so the flag is really there to let you skip the scan when nothing failed.
 """
 
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 
 from .atomic import AtomicCounter, atomic_store_relaxed
 from .ffi import OpaquePtr, I64Ptr, i64_ptr, opaque_ptr
@@ -225,8 +225,8 @@ def _parallel_worker[work: WorkFn](arg: OpaquePtr) -> OpaquePtr:
     var counter = AtomicCounter.at(Int(arg) + _SLOT_COUNTER * 8)
     # Plain reads: these cells were written before pthread_create, and thread
     # creation is a happens-before edge, so no atomic is needed here.
-    var n_tasks = Int(cells[_SLOT_N_TASKS])
-    var user_ctx = opaque_ptr(Int(cells[_SLOT_USER_CTX]))
+    var n_tasks = Int(cells[unsafe_offset=_SLOT_N_TASKS])
+    var user_ctx = opaque_ptr(Int(cells[unsafe_offset=_SLOT_USER_CTX]))
     while True:
         var i = Int(counter.fetch_add(1))
         if i >= n_tasks:
@@ -272,11 +272,11 @@ def parallel_for[
 
     # One shared block of 64-bit cells, heap allocated so its address survives
     # any move of this frame's locals, and freed only after every join.
-    var block = alloc[Int64](_PAR_CELLS)
+    var block = unsafe_alloc[Int64](_PAR_CELLS)
     var cells = i64_ptr(Int(block))
     atomic_store_relaxed(i64_ptr(Int(block) + _SLOT_COUNTER * 8), 0)
-    cells[_SLOT_N_TASKS] = Int64(n_tasks)
-    cells[_SLOT_USER_CTX] = Int64(Int(ctx))
+    cells[unsafe_offset=_SLOT_N_TASKS] = Int64(n_tasks)
+    cells[unsafe_offset=_SLOT_USER_CTX] = Int64(Int(ctx))
     var shared = opaque_ptr(Int(block))
 
     var group: ThreadGroup

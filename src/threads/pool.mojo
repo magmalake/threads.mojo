@@ -61,7 +61,7 @@ The `ctx` you pass in is *not* owned by the pool. It must outlive the pool, and
 because the destructor joins, "outlives the pool value" is sufficient.
 """
 
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 
 from .atomic import AtomicCounter, AtomicFlag, atomic_store_relaxed
 from .ffi import I64Ptr, OpaquePtr, i64_ptr, opaque_ptr
@@ -103,7 +103,7 @@ def _pool_worker[work: WorkerFn](arg: OpaquePtr) -> OpaquePtr:
     var stop = AtomicFlag.at(Int(arg) + _SLOT_STOP * 8)
     # Plain read: this cell was written before `pthread_create`, and thread
     # creation is a happens-before edge.
-    var user_ctx = opaque_ptr(Int(cells[_SLOT_USER_CTX]))
+    var user_ctx = opaque_ptr(Int(cells[unsafe_offset=_SLOT_USER_CTX]))
     work(index, user_ctx, stop)
     return arg
 
@@ -168,12 +168,12 @@ struct WorkerPool(Movable):
 
         # Heap allocated so its address survives any move of this frame's
         # locals, and so the workers can keep reading it after `start` returns.
-        var header = alloc[Int64](_POOL_CELLS)
+        var header = unsafe_alloc[Int64](_POOL_CELLS)
         atomic_store_relaxed(
             i64_ptr(Int(header) + _SLOT_NEXT_INDEX * 8), Int64(0)
         )
         atomic_store_relaxed(i64_ptr(Int(header) + _SLOT_STOP * 8), Int64(0))
-        header[_SLOT_USER_CTX] = Int64(Int(ctx))
+        header[unsafe_offset=_SLOT_USER_CTX] = Int64(Int(ctx))
 
         var group: ThreadGroup
         try:

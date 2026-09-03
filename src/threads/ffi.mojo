@@ -5,7 +5,7 @@ speaks, and the C NULL convention.
 crosses a thread boundary in this library has the shape
 
 ```mojo
-def (UnsafePointer[UInt8, MutUntrackedOrigin]) thin -> UnsafePointer[UInt8, MutUntrackedOrigin]
+def (Pointer[UInt8, MutUntrackedOrigin]) thin -> Pointer[UInt8, MutUntrackedOrigin]
 ```
 
 `OpaquePtr` is that pointer type. It is deliberately a byte pointer rather than
@@ -13,18 +13,18 @@ a `void`-like: Mojo has no `void`, and a byte pointer is what you want anyway
 when the context is a hand-laid-out block of cells.
 
 NULL is passed as a plain `Int` `0` in every `external_call` that needs it, not
-as a pointer. `UnsafePointer` is non-nullable on both Mojo 1.0.0 and current
+as a pointer. `Pointer` is non-nullable on both Mojo 1.0.0 and current
 nightly (`constraint failed: Pointer is non-nullable`), so a null pointer value
 cannot be constructed at all. An `Int` argument occupies the same register as a
 pointer under both the SysV and AAPCS64 C ABIs, so the call is identical.
 """
 
 
-comptime OpaquePtr = UnsafePointer[UInt8, MutUntrackedOrigin]
+comptime OpaquePtr = Pointer[UInt8, MutUntrackedOrigin]
 """The `void *` of this library: what a thread start routine takes and returns,
 and what `parallel_for` passes to every task as its shared context."""
 
-comptime I64Ptr = UnsafePointer[Int64, MutUntrackedOrigin]
+comptime I64Ptr = Pointer[Int64, MutUntrackedOrigin]
 """Pointer to a naturally aligned 64-bit cell — the unit every atomic in
 `threads.atomic` operates on."""
 

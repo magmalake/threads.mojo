@@ -30,7 +30,7 @@ both clearer at the call site and cheaper to read than a `comptime if` ladder.
 `fetch_add` is sequentially consistent; that is what a work-queue counter wants.
 """
 
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 
 from .ffi import I64Ptr, i64_ptr, OpaquePtr
 
@@ -229,7 +229,7 @@ struct AtomicCounter(Copyable, ImplicitlyCopyable, Movable):
         Returns:
             A view of the new cell.
         """
-        var cell = alloc[Int64](1)
+        var cell = unsafe_alloc[Int64](1)
         var view = Self(i64_ptr(Int(cell)))
         atomic_store_relaxed(view._ptr, initial)
         return view
@@ -346,7 +346,7 @@ struct AtomicFlag(Copyable, ImplicitlyCopyable, Movable):
         Returns:
             A view of the new cell. Free it with `unsafe_free` after joining.
         """
-        var cell = alloc[Int64](1)
+        var cell = unsafe_alloc[Int64](1)
         var view = Self(i64_ptr(Int(cell)))
         atomic_store_relaxed(view._ptr, 0)
         return view

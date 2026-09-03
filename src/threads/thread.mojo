@@ -33,7 +33,7 @@ on `ubuntu-latest` and `macos-latest` in CI.
 """
 
 from std.ffi import external_call, c_int, c_size_t
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 from std.sys.info import CompilationTarget
 
 from .ffi import OpaquePtr, NULL
@@ -89,14 +89,14 @@ struct ThreadHandle(Movable):
                 scheduling-attribute refusals).
         """
         var tid = UInt64(0)
-        var tid_ptr = UnsafePointer[UInt64, MutUntrackedOrigin](
-            unsafe_from_address=Int(UnsafePointer(to=tid))
+        var tid_ptr = Pointer[UInt64, MutUntrackedOrigin](
+            unsafe_from_address=Int(Pointer(to=tid))
         )
         # A NULL attr means PTHREAD_CREATE_JOINABLE with default stack size.
         var rc = external_call[
             "pthread_create",
             c_int,
-            UnsafePointer[UInt64, MutUntrackedOrigin],  # pthread_t *
+            Pointer[UInt64, MutUntrackedOrigin],  # pthread_t *
             Int,  # const pthread_attr_t * (NULL)
             StartFn,  # void *(*)(void *)
             OpaquePtr,  # void *
@@ -173,18 +173,20 @@ struct ThreadHandle(Movable):
         comptime if CompilationTarget.is_linux():
             # glibc's cpu_set_t is 1024 bits. Zero it, set one bit.
             comptime CPUSET_BYTES: Int = 128
-            var mask = alloc[UInt8](CPUSET_BYTES)
+            var mask = unsafe_alloc[UInt8](CPUSET_BYTES)
             for i in range(CPUSET_BYTES):
-                mask[i] = 0
+                mask[unsafe_offset=i] = 0
             var byte_index = cpu // 8
             if byte_index < CPUSET_BYTES:
-                mask[byte_index] = mask[byte_index] | UInt8(1 << (cpu % 8))
+                mask[unsafe_offset=byte_index] = mask[
+                    unsafe_offset=byte_index
+                ] | UInt8(1 << (cpu % 8))
             var rc = external_call[
                 "pthread_setaffinity_np",
                 c_int,
                 UInt64,  # pthread_t
                 c_size_t,  # cpusetsize
-                UnsafePointer[UInt8, MutUntrackedOrigin],  # cpu_set_t *
+                Pointer[UInt8, MutUntrackedOrigin],  # cpu_set_t *
             ](self._thread_id, c_size_t(CPUSET_BYTES), mask)
             mask.unsafe_free()
             if rc != c_int(0):

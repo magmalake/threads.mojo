@@ -44,24 +44,24 @@ yours and add `-I ../threads.mojo/src` to your `mojo build`.
 ## Quick start
 
 ```mojo
-from std.memory import alloc
+from std.memory.alloc import unsafe_alloc
 from threads import OpaquePtr, i64_ptr, opaque_ptr, parallel_for
 
 
 def square(i: Int, ctx: OpaquePtr) -> None:
     var cells = i64_ptr(Int(ctx))
-    cells[i] = cells[i] * cells[i]
+    cells[unsafe_offset=i] = cells[unsafe_offset=i] * cells[unsafe_offset=i]
 
 
 def main() raises:
     var n = 1_000_000
-    var data = alloc[Int64](n)
+    var data = unsafe_alloc[Int64](n)
     for i in range(n):
-        data[i] = Int64(i)
+        data[unsafe_offset=i] = Int64(i)
 
     parallel_for[square](n_tasks=n, ctx=opaque_ptr(Int(data)))
 
-    print(data[999])   # 998001
+    print(data[unsafe_offset=999])   # 998001
     data.unsafe_free()
 ```
 
@@ -229,7 +229,7 @@ intrinsics that `std.atomic` is itself written on top of — those are identical
 on both. Bridging that gap is half of what this tin is for: your code writes
 one spelling and keeps compiling across the split.
 
-Two smaller portability notes baked in for the same reason: `UnsafePointer` is
+Two smaller portability notes baked in for the same reason: `Pointer` is
 non-nullable on both toolchains now (`constraint failed: Pointer is
 non-nullable`), so C `NULL` is passed as a plain `Int` — identical in the
 register under both the SysV and AAPCS64 ABIs. And `List` iteration requires a
