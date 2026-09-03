@@ -1,4 +1,4 @@
-"""threads.mojo — minimal pthreads for Mojo.
+"""Minimal pthreads for Mojo — the `threads` package of threads.mojo.
 
 Spawn and join OS threads, share state through atomics and a mutex, and fan a
 loop out over cores with `parallel_for`. No dependencies beyond the Mojo

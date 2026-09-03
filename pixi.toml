@@ -2,7 +2,7 @@
 authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 name = "threads.mojo"
-version = "0.2.1"
+version = "0.2.2"
 description = "Minimal pthreads for Mojo — spawn/join, atomics, a mutex, parallel_for, and a WorkerPool. No dependencies."
 preview = ["pixi-build"]
 platforms = ["osx-arm64", "linux-64"]
@@ -27,7 +27,7 @@ format-check = { cmd = "mojo format src tests && git diff --exit-code -- src tes
 # Conda package name is threads-mojo; the Mojo import stays `from threads import …`.
 [package]
 name = "threads-mojo"
-version = "0.2.1"
+version = "0.2.2"
 
 [package.build]
 backend = { name = "pixi-build-mojo", version = "0.*" }
