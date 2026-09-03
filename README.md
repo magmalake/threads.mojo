@@ -133,7 +133,7 @@ from threads import (
     num_cpus, current_thread_id, yield_now,
     AtomicCounter, AtomicFlag,
     Mutex, MutexRef, CondVar, CondVarRef,
-    parallel_for, WorkerPool,
+    parallel_for, WorkerPool, TypedPool,
     OpaquePtr, i64_ptr, opaque_ptr,
 )
 ```
@@ -146,6 +146,24 @@ worker loops on its own until something says stop. `WorkerPool` is that shape:
 `spawn_n` + `AtomicFlag` + `ThreadGroup.join_all()` bundled so callers stop
 re-deriving the header layout and the free-after-join rule. It is deliberately
 thin — no queue, no task type, no scheduler.
+
+`TypedPool` is the same pool with the shared state typed, and it is the one to
+reach for unless the context is a hand-laid-out block of cells:
+
+```mojo
+from threads import AtomicCounter, AtomicFlag, TypedPool
+
+def serve(worker: Int, mut app: App, stop: AtomicFlag) -> None:
+    while not stop.is_set():
+        app.handle_one_request()
+
+def main() raises:
+    var app = App()
+    var pool = TypedPool.start[serve](n=8, state=app)
+    wait_for_sigint()
+    pool.shutdown()                  # request_stop + join
+    print(pool.state().served)       # the state is still there, by construction
+```
 
 ```mojo
 from threads import AtomicCounter, AtomicFlag, OpaquePtr, WorkerPool
@@ -163,12 +181,19 @@ def main() raises:
 | item | signature | notes |
 |---|---|---|
 | `WorkerFn` | `def(Int, OpaquePtr, AtomicFlag) thin -> None` | worker index, shared context, stop flag |
+| `PoolTaskFn[T]` | `def(Int, mut T, AtomicFlag) thin -> None` | the same, with the state typed |
 | `WorkerPool.start` | `start[work: WorkerFn](n, ctx) raises -> WorkerPool` | `n >= 1` (a zero-worker pool is refused, not silently created); an `n`-less overload uses `num_cpus()` |
+| `TypedPool.start` | `start[task: PoolTaskFn[T]](n, ref state: T) raises -> TypedPool[T, origin]` | `T` and `origin` are inferred from `state`; same `n >= 1` rule and same `n`-less overload |
+| `.state()` | `-> ref[origin] T` | `TypedPool` only; read totals after `shutdown()` without naming the local again |
 | `.request_stop()` | `-> None` | release-store to the flag; returns immediately |
 | `.join()` | `(mut self) raises` | joins every worker; does **not** set the flag |
 | `.shutdown()` | `(mut self) raises` | `request_stop` then `join` |
 | `.num_workers()` / `.is_stopping()` / `.stop_flag()` | | `stop_flag()` is a view, so a third party holding its `address()` can end the pool |
 | `.pin_all()` | `raises` | worker `i` to CPU `i % num_cpus()` (a no-op on macOS) |
+
+Everything after `start` is identical on both, with the same names and
+signatures, so moving between the two forms is a change of construction and
+nothing else.
 
 Workers are **symmetric**: every one runs the same body, and the index exists
 only so a worker can address its own slot in your context. It is drawn from an
@@ -195,6 +220,24 @@ value at its **last use**, so a pool whose last mention is `request_stop()` is
 destroyed on that line and the destructor's join is what keeps the header alive
 under the still-running workers. Your `ctx` is not owned by the pool and must
 outlive it; since the destructor joins, outliving the pool *value* is enough.
+
+With `WorkerPool` that last sentence is a rule for you to keep: an `OpaquePtr`
+carries no origin, so nothing checks it, and the failure is silent — build the
+context out of a local, hand over its address, never mention the local again,
+and it is destroyed on the line where you took the address, with the workers
+still reading it.
+
+`TypedPool` is the same sentence made a guarantee. `parallel_for`'s typed
+overload gets there by taking `ref state`, because the state is an argument and
+the call joins before it returns; a pool outlives its `start` call, so a `ref`
+argument alone buys nothing. So the origin rides out of `start` on the returned
+value: `TypedPool[T, origin]` names it in its type and holds a
+`Pointer[T, origin]` field. A live pool value is a live use of that origin, so
+the compiler will not destroy `state` before the pool — and the pool's
+destructor joins every worker before it returns. The
+`typed pool state outlives the pool` test poisons the state in its destructor
+and asserts that no worker ever read the poison; written against `WorkerPool`
+and a hand-erased pointer, the same program segfaults.
 
 ### `threads.parallel`
 
@@ -343,7 +386,7 @@ $ pixi run test              # nightly
 $ pixi run -e stable test    # Mojo 1.0.0
 ```
 
-38 tests on each environment, on both platforms. The load-bearing ones are the
+44 tests on each environment, on both platforms. The load-bearing ones are the
 races, each written so a broken primitive produces a *wrong number* rather than
 a flake:
 
@@ -365,6 +408,12 @@ a flake:
   consulting the flag still joins; a pool destroyed without `shutdown()` still
   stops, joins, and frees in that order; and a third party setting the flag
   through `stop_flag().address()`.
+- **`TypedPool`** — six tests: the typed spellings of the tick, unique-indices
+  and `n = 1` cases; `n < 1` still refused through the wrapper; a pool dropped
+  rather than shut down; and the one the design exists for — a state whose
+  destructor poisons its heap cell to -1, started over a local that is never
+  named again, with the workers counting every poisoned read they see. The
+  count must be 0.
 - **Stress** — 500 sequential spawn/joins, 50 back-to-back `parallel_for`
   rounds, 50 `WorkerPool`s started and shut down back to back.
 

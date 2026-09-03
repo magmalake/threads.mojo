@@ -43,6 +43,8 @@ from .parallel import (
     spawn_n,
 )
 from .pool import (
+    PoolTaskFn,
+    TypedPool,
     WorkerFn,
     WorkerPool,
 )

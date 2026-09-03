@@ -26,6 +26,7 @@ from threads import (
     OpaquePtr,
     ThreadGroup,
     ThreadHandle,
+    TypedPool,
     WorkerPool,
     atomic_fetch_add,
     current_thread_id,
@@ -807,6 +808,209 @@ def test_worker_pool_stop_flag_can_be_set_by_a_third_party() raises:
     for i in range(n):
         assert_equal(Int(cells[unsafe_offset=_P_SLOTS + i]), 1)
     _free_cells(ctx)
+
+
+# ── TypedPool ────────────────────────────────────────────────────────────────
+#
+# The typed pool's whole claim is that the state it was started over cannot be
+# destroyed before the last worker has stopped reading it, because the pool's
+# type carries the state's origin. The first three tests below are the typed
+# spellings of the `WorkerPool` tests above; the last one is the claim itself.
+
+
+struct _PoolTotals(Movable):
+    """Shared state for the typed pool: one hammered counter, one slot per
+    worker so a duplicated index shows up as a wrong number."""
+
+    var ticks: Int64
+    var slots: List[Int64]
+
+    def __init__(out self, n: Int):
+        self.ticks = 0
+        self.slots = List[Int64](length=n, fill=0)
+
+
+def _tick_typed(worker: Int, mut t: _PoolTotals, stop: AtomicFlag) -> None:
+    """The typed twin of `_tick_until_stopped`."""
+    var ticks = AtomicCounter.at(Int(Pointer(to=t.ticks)))
+    while not stop.is_set():
+        _ = ticks.fetch_add(1)
+    # Plain write to a slot only this worker touches; the join publishes it.
+    t.slots[worker] = t.slots[worker] + 1
+
+
+def _wait_for_typed_ticks(mut t: _PoolTotals, target: Int) -> Int:
+    """Spin (politely) until the tick counter reaches `target` or 5s elapse."""
+    var ticks = AtomicCounter.at(Int(Pointer(to=t.ticks)))
+    var t0 = perf_counter_ns()
+    while perf_counter_ns() - t0 < 5_000_000_000:
+        if Int(ticks.load()) >= target:
+            break
+        yield_now()
+    return Int(ticks.load())
+
+
+def test_typed_pool_runs_until_stopped_then_joins() raises:
+    """Four workers hammer a counter inside the caller's struct; `shutdown()`
+    terminates and the state is still readable afterwards."""
+    var n = 4
+    var totals = _PoolTotals(n)
+    var pool = TypedPool.start[_tick_typed](n, totals)
+    assert_equal(pool.num_workers(), n)
+    assert_true(not pool.is_stopping())
+    var observed = _wait_for_typed_ticks(totals, 10000)
+    assert_true(
+        observed >= 10000,
+        String("workers only reached ", observed, " ticks in 5s"),
+    )
+    pool.shutdown()
+    assert_true(pool.is_stopping())
+    # Read back through the pool as well as through the local: both are the
+    # same object, and `state()` is what a caller who never named the local
+    # again would use.
+    assert_true(Int(pool.state().ticks) >= 10000)
+    assert_equal(Int(totals.ticks), Int(pool.state().ticks))
+    for i in range(n):
+        assert_equal(Int(totals.slots[i]), 1)
+
+
+def test_typed_pool_indices_are_unique_and_cover_the_range() raises:
+    """16 workers, 16 slots, each written exactly once."""
+    var n = 16
+    var totals = _PoolTotals(n)
+    var pool = TypedPool.start[_tick_typed](n, totals)
+    pool.shutdown()
+    var total = 0
+    for i in range(n):
+        assert_equal(
+            Int(totals.slots[i]),
+            1,
+            String("slot ", i, " was claimed ", Int(totals.slots[i]), "x"),
+        )
+        total += Int(totals.slots[i])
+    assert_equal(total, n)
+
+
+def test_typed_pool_single_worker() raises:
+    """A one-worker typed pool still starts, ticks, stops, and joins."""
+    var totals = _PoolTotals(1)
+    var pool = TypedPool.start[_tick_typed](1, totals)
+    assert_equal(pool.num_workers(), 1)
+    var observed = _wait_for_typed_ticks(totals, 1000)
+    assert_true(observed >= 1000, String("one worker managed ", observed))
+    pool.shutdown()
+    assert_equal(Int(totals.slots[0]), 1)
+
+
+struct _Poisoned(Movable):
+    """Owns one heap cell and poisons it on destruction.
+
+    `__deinit__` writes -1 and *leaks* the block rather than freeing it: a
+    write into a freed block is undefined behaviour that may or may not show
+    up, while a write into a poisoned, leaked block is a number a worker can
+    read and report. The leak is deliberate and bounded — one cell per test.
+
+    `seen_poison` is bumped by any worker that reads -1 out of the cell, which
+    is precisely the event the origin on `TypedPool` is supposed to make
+    impossible.
+    """
+
+    var cell: Pointer[Int64, MutUntrackedOrigin]
+    var seen_poison: Int64
+    var reads: Int64
+
+    def __init__(out self):
+        self.cell = Pointer[Int64, MutUntrackedOrigin](
+            unsafe_from_address=Int(unsafe_alloc[Int64](1))
+        )
+        self.cell[] = 0xC0FFEE
+        self.seen_poison = 0
+        self.reads = 0
+
+    def value(self) -> Int64:
+        """The cell's contents, read through `self`.
+
+        A method rather than `p.cell[]` at the call site on purpose: copying
+        the untracked pointer field out is the struct's last *use*, so the
+        drop lands between the copy and the deref and the caller reads the
+        poison for reasons that have nothing to do with threads. Borrowing
+        through `self` keeps the struct alive across the read.
+        """
+        return self.cell[]
+
+    def __deinit__(deinit self):
+        self.cell[] = -1
+
+
+def _read_until_stopped(
+    worker: Int, mut p: _Poisoned, stop: AtomicFlag
+) -> None:
+    """Read the heap cell for as long as the pool runs, counting poison.
+
+    Every read goes through `p`, so if `p` were destroyed early this loop
+    would be reading a poisoned cell for the rest of its life.
+    """
+    var reads = AtomicCounter.at(Int(Pointer(to=p.reads)))
+    var poison = AtomicCounter.at(Int(Pointer(to=p.seen_poison)))
+    while not stop.is_set():
+        if p.value() == -1:
+            _ = poison.fetch_add(1)
+        _ = reads.fetch_add(1)
+    # One last read after the flag, which is the closest a worker gets to the
+    # join: if the state dies at the caller's last mention, this is where it
+    # would already be poisoned.
+    if p.value() == -1:
+        _ = poison.fetch_add(1)
+
+
+def test_typed_pool_state_outlives_the_pool() raises:
+    """The point of the design, as a number.
+
+    `poisoned` is never mentioned after `TypedPool.start` — no later use props
+    it up. With an `OpaquePtr` the compiler would destroy it on the `start`
+    line and the workers would spend their whole lives reading -1. Because the
+    pool's type carries the origin, the destruction cannot happen before the
+    pool value is destroyed, and the pool's destructor joins first.
+    """
+    var poisoned = _Poisoned()
+    var pool = TypedPool.start[_read_until_stopped](4, poisoned)
+    # From here on, only `pool` — deliberately.
+    var seen = AtomicCounter.at(Int(Pointer(to=pool.state().reads)))
+    var t0 = perf_counter_ns()
+    while perf_counter_ns() - t0 < 5_000_000_000:
+        if Int(seen.load()) > 100_000:
+            break
+        yield_now()
+    pool.shutdown()
+    var reads = Int(pool.state().reads)
+    var poison = Int(pool.state().seen_poison)
+    var cell = Int(pool.state().value())
+    assert_true(
+        reads > 100_000, String("workers only managed ", reads, " reads")
+    )
+    assert_equal(poison, 0, String(poison, " reads saw the poisoned cell"))
+    assert_equal(cell, 0xC0FFEE, "the cell was already poisoned at shutdown")
+
+
+def test_typed_pool_dropped_without_shutdown_still_stops_and_joins() raises:
+    """Same guarantee on the drop path: the pool is destroyed rather than shut
+    down, and the state is still live when the last worker reads it."""
+    var totals = _PoolTotals(4)
+    var pool = TypedPool.start[_tick_typed](4, totals)
+    var observed = _wait_for_typed_ticks(totals, 1000)
+    assert_true(observed >= 1000, String("workers managed ", observed))
+    _ = pool^  # destroy here, deterministically — no shutdown() call
+    for i in range(4):
+        assert_equal(Int(totals.slots[i]), 1)
+
+
+def test_typed_pool_rejects_a_worker_count_below_one() raises:
+    """The `n >= 1` check is `WorkerPool`'s and still fires through the wrapper.
+    """
+    var totals = _PoolTotals(1)
+    with assert_raises():
+        var pool = TypedPool.start[_tick_typed](0, totals)
+        _ = pool^
 
 
 # ── stress ───────────────────────────────────────────────────────────────────
