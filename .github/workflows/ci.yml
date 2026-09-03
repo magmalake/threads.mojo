@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: prefix-dev/setup-pixi@v0.9.0
+      - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           # Pinned: pixi.lock is written by this version, and pixi changed how
           # it hashes source dependencies after it, so a newer pixi rejects the
