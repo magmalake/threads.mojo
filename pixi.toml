@@ -15,7 +15,10 @@ platforms = ["osx-arm64", "linux-64"]
 test = { cmd = "mkdir -p build && mojo build tests/test_threads.mojo -I src -o build/threads-test && ./build/threads-test" }
 cli = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/threads-mojo" }
 bench = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/threads-mojo && ./build/threads-mojo bench" }
-check = { depends-on = ["test", "cli"] }
+# mojolint (lint-mojo, below): the origin and threading mistakes the compiler
+# lets through, with mojo-lsp-server behind the rules. Exit 1 on findings.
+lint = { cmd = "mojolint --lsp -I src src tests" }
+check = { depends-on = ["test", "cli", "lint"] }
 fmt = { cmd = "mojo format src tests" }
 # `mojo format` has no check mode in 1.0.0 — it rejects `--check`, and there is
 # none among the hidden options either — so the check is: format, then assert the
@@ -54,3 +57,9 @@ mojo-compiler = "==1.0.0"
 [environments]
 default = ["nightly"]
 stable = ["stable"]
+
+[dependencies]
+# Added by `pixi shelf add lint-mojo`: the linter comes from GitHub as a pixi
+# source dependency pinned at the revision mojoshelf published, and builds
+# the `mojolint` executable into every environment next to mojo-lsp-server.
+lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "2a12807b7847984aff2c8bf148b0eb7515a99844" }
