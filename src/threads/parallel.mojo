@@ -2,22 +2,56 @@
 layer underneath it.
 
 ```mojo
-from threads import parallel_for, OpaquePtr, i64_ptr
+from threads import parallel_for, AtomicCounter
 
+@fieldwise_init
+struct Totals(Copyable, Movable):
+    var sum: Int64
+
+def task(i: Int, mut totals: Totals) -> None:
+    _ = AtomicCounter.at(Int(Pointer(to=totals.sum))).fetch_add(Int64(i))
+
+def main() raises:
+    var totals = Totals(0)
+    parallel_for[task](1000, totals)
+    print(totals.sum)  # 499500
+```
+
+`parallel_for` starts `min(n_tasks, num_workers or num_cpus())` kernel threads.
+Each one loops on `AtomicCounter.fetch_add(1)` and runs `task(i, state)` for
+every index it draws, stopping when the counter passes `n_tasks`. Every thread
+is joined before the call returns, so by construction nothing the caller owns
+can be destroyed while a worker still reads it.
+
+## Two spellings of the same call
+
+The **typed** form above takes the shared state by `ref` and the task by
+`mut`. Because the state is an argument, it is alive for the whole call — the
+compiler extends its lifetime across the joins, with no later mention needed —
+and an immutable binding or a temporary is rejected at the call site. The
+erasure to `void *` that pthread demands happens inside the library, once.
+
+The **opaque** form is the one underneath:
+
+```mojo
 def square_chunk(i: Int, ctx: OpaquePtr) -> None:
     var cells = i64_ptr(Int(ctx))
     cells[unsafe_offset=i] = cells[unsafe_offset=i] * cells[unsafe_offset=i]
 
-def main() raises:
-    ...
-    parallel_for[square_chunk](n_tasks=64, ctx=my_ctx)
+parallel_for[square_chunk](n_tasks=64, ctx=opaque_ptr(Int(data)))
 ```
 
-`parallel_for` starts `min(n_tasks, num_workers or num_cpus())` kernel threads.
-Each one loops on `AtomicCounter.fetch_add(1)` and runs `work(i, ctx)` for every
-index it draws, stopping when the counter passes `n_tasks`. Every thread is
-joined before the call returns, so by construction nothing the caller owns can
-be destroyed while a worker still reads it.
+Reach for it when the context is a hand-laid-out block of cells rather than a
+struct, or when the pointer comes from somewhere the compiler cannot track
+anyway (an allocation, a foreign buffer). It carries no origin: the caller
+guarantees the pointee outlives the call, and `ctx` being an untracked
+`Pointer` means Mojo's last-use destruction can free a local out from under
+the workers with no diagnostic — see `threads.thread`.
+
+What neither form checks: that `T` is safe to mutate from several threads at
+once. Every task receives `mut` access to the same value; anything that is
+not an atomic, a mutex-guarded region, or a slot only one task writes is a
+data race the compiler will not see.
 
 ## The send contract, restated
 
@@ -76,7 +110,12 @@ from .thread import StartFn, ThreadHandle, num_cpus
 
 
 comptime WorkFn = def(Int, OpaquePtr) thin -> None
-"""A `parallel_for` task body: takes its task index and the shared context."""
+"""A `parallel_for` task body, opaque form: the task index and the shared
+context pointer."""
+
+comptime TaskFn[T: AnyType] = def(Int, mut T) thin -> None
+"""A `parallel_for` task body, typed form: the task index and mutable access
+to the shared state. Every task gets the same `T`, at the same time."""
 
 
 # Context-block layout for the workers, in 64-bit cells.
@@ -294,3 +333,41 @@ def parallel_for[
         block.unsafe_free()
         raise Error("parallel_for could not join workers: ", String(e))
     block.unsafe_free()
+
+
+def _typed_worker[T: AnyType, task: TaskFn[T]](i: Int, ctx: OpaquePtr) -> None:
+    """Turn the opaque pointer back into a `T` and call the typed task."""
+    task(i, Pointer[T, MutUntrackedOrigin](unsafe_from_address=Int(ctx))[])
+
+
+def parallel_for[
+    T: AnyType, origin: MutOrigin, //, task: TaskFn[T]
+](n_tasks: Int, ref[origin] state: T, num_workers: Int = 0) raises:
+    """Run `task(i, state)` for every `i` in `[0, n_tasks)`, across threads.
+
+    The typed form of `parallel_for`. `state` is an argument, so it is alive
+    for the whole call, joins included, without the caller having to mention
+    it afterwards; and it is taken by mutable `ref`, so a `read` argument or a
+    temporary is refused at the call site. The pointer pthread carries is
+    built here and rebuilt in `_typed_worker`; nothing outside the library
+    handles it.
+
+    Parameters:
+        T: The shared state type. Inferred from `state`.
+        origin: The origin of `state`. Inferred.
+        task: The task body, `def(Int, mut T) thin -> None`. Thin and
+            non-raising, as in the opaque form.
+
+    Args:
+        n_tasks: How many indices to hand out. Zero or negative does nothing.
+        state: The value every task receives by `mut`. Guarding concurrent
+            writes to it is the task's job — atomics, a `Mutex`, or per-task
+            slots.
+        num_workers: Thread count, as in the opaque form.
+
+    Raises:
+        Error: If a thread fails to start or to join.
+    """
+    parallel_for[_typed_worker[T, task]](
+        n_tasks, opaque_ptr(Int(Pointer(to=state))), num_workers
+    )

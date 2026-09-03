@@ -521,6 +521,65 @@ def test_parallel_for_error_cell_pattern() raises:
     _free_cells(ctx)
 
 
+# ── parallel_for, typed form ─────────────────────────────────────────────────
+
+
+@fieldwise_init
+struct _Totals(Copyable, Movable):
+    """Shared state for the typed form: one atomically bumped cell."""
+
+    var count: Int64
+    var sum: Int64
+
+
+def _bump_totals(i: Int, mut t: _Totals) -> None:
+    _ = AtomicCounter.at(Int(Pointer(to=t.count))).fetch_add(1)
+    _ = atomic_fetch_add(i64_ptr(Int(Pointer(to=t.sum))), Int64(i))
+
+
+def test_parallel_for_typed_task_count_and_index_sum() raises:
+    """The typed form hands every index out exactly once, and the state the
+    caller passed by `ref` is the one the tasks wrote."""
+    var n = 10_000
+    var totals = _Totals(0, 0)
+    parallel_for[_bump_totals](n, totals, num_workers=8)
+    assert_equal(Int(totals.count), n)
+    assert_equal(Int(totals.sum), (n - 1) * n // 2)
+
+
+def test_parallel_for_typed_with_zero_tasks_does_nothing() raises:
+    var totals = _Totals(0, 0)
+    parallel_for[_bump_totals](0, totals)
+    parallel_for[_bump_totals](-5, totals)
+    assert_equal(Int(totals.count), 0)
+
+
+struct _Slots(Movable):
+    """Shared state that owns heap memory, so a lifetime mistake would be a
+    write into freed memory rather than into a dead stack slot."""
+
+    var cells: List[Int64]
+
+    def __init__(out self, n: Int):
+        self.cells = List[Int64](length=n, fill=0)
+
+
+def _square_into_own_slot(i: Int, mut s: _Slots) -> None:
+    """One slot per task; no synchronisation needed."""
+    s.cells[i] = Int64(i * i)
+
+
+def test_parallel_for_typed_state_lives_across_the_join() raises:
+    """`slots` is never mentioned between the call and the asserts in a way
+    the opaque form would count as a use — with the typed form it does not
+    have to be: as an argument it is alive for the whole call."""
+    var n = 4096
+    var slots = _Slots(n)
+    parallel_for[_square_into_own_slot](n, slots)
+    for i in range(n):
+        assert_equal(Int(slots.cells[i]), i * i)
+
+
 # ── allocator under threads ──────────────────────────────────────────────────
 
 
