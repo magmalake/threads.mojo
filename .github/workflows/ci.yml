@@ -31,6 +31,9 @@ jobs:
       - name: Unit tests
         run: pixi run -e ${{ matrix.env }} test
 
+      - name: Lint (mojolint --lsp)
+        run: pixi run -e ${{ matrix.env }} lint
+
       - name: Demo CLI builds and runs
         run: |
           pixi run -e ${{ matrix.env }} cli
