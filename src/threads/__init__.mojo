@@ -5,7 +5,7 @@ loop out over cores with `parallel_for`. No dependencies beyond the Mojo
 standard library and the pthread symbols every libc already exports.
 
 ```mojo
-from threads import parallel_for, num_cpus, OpaquePtr, AtomicCounter
+from threads import parallel_for, num_cpus, AtomicCounter
 ```
 
 Start with `threads.parallel` for the `parallel_for` contract, `threads.pool`
@@ -35,6 +35,7 @@ from .mutex import (
     MutexRef,
 )
 from .parallel import (
+    TaskFn,
     ThreadGroup,
     WorkFn,
     join_all,

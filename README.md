@@ -44,6 +44,32 @@ yours and add `-I ../threads.mojo/src` to your `mojo build`.
 ## Quick start
 
 ```mojo
+from threads import AtomicCounter, parallel_for
+
+
+@fieldwise_init
+struct Totals(Copyable, Movable):
+    var sum: Int64
+
+
+def task(i: Int, mut totals: Totals) -> None:
+    _ = AtomicCounter.at(Int(Pointer(to=totals.sum))).fetch_add(Int64(i))
+
+
+def main() raises:
+    var totals = Totals(0)
+    parallel_for[task](1000, totals)
+    print(totals.sum)   # 499500
+```
+
+The state goes in by `ref` and every task gets it by `mut`. Because it is an
+argument, it is alive for the whole call — no need to mention it afterwards
+to keep last-use destruction at bay — and a `read` argument or a temporary is
+rejected where the call is made.
+
+The same call on a raw block of cells, when the context is not a struct:
+
+```mojo
 from std.memory.alloc import unsafe_alloc
 from threads import OpaquePtr, i64_ptr, opaque_ptr, parallel_for
 
@@ -78,13 +104,22 @@ the same three everywhere in the API:
 2. **Shared state travels through the `ctx` pointer.** One pointer, for every
    task. Lay out a block of 64-bit cells and index it; that is what the tests
    and the demo do.
-3. **The caller guarantees `ctx` outlives the call.** `parallel_for` joins
-   every worker before it returns, so "outlives the call" is all you need — but
-   Mojo destroys a value at its **last use**, not at the end of the scope, so a
-   context you stop mentioning after the spawn can be freed underneath a
-   running thread. Mention it after the join, or heap-allocate it and free it
-   after the join. `test_parallel_for_context_outlives_the_join` and
-   `test_mutex_gives_mutual_exclusion` both exist to catch a regression here.
+3. **The caller guarantees the context outlives the call.** `parallel_for`
+   joins every worker before it returns, so "outlives the call" is all you
+   need. The typed form gets this from the compiler: the state is a `ref`
+   argument, so it lives across the call by construction. The opaque form does
+   not — Mojo destroys a value at its **last use**, not at the end of the
+   scope, and an untracked pointer is not a use, so a local you stop
+   mentioning after the spawn can be freed underneath a running thread.
+   Mention it after the join, or heap-allocate it and free it after the join.
+   `test_parallel_for_context_outlives_the_join`,
+   `test_parallel_for_typed_state_lives_across_the_join` and
+   `test_mutex_gives_mutual_exclusion` exist to catch a regression here.
+
+Neither form checks that the state is safe to mutate from several threads at
+once. Every task has `mut` access to the same value; anything that is not an
+atomic, a mutex-guarded region, or a slot only one task writes is a data race
+the compiler will not see.
 
 A task cannot raise, so failures come back through the context. The pattern —
 an `AtomicFlag` plus one error-code cell per task — is documented in
@@ -165,7 +200,8 @@ outlive it; since the destructor joins, outliving the pool *value* is enough.
 
 | item | signature | notes |
 |---|---|---|
-| `parallel_for` | `parallel_for[work: def(Int, OpaquePtr) thin -> None](n_tasks, ctx, num_workers=0) raises` | starts `min(n_tasks, num_workers or num_cpus())` threads that pull indices off one shared atomic counter; joins all before returning |
+| `parallel_for` (typed) | `parallel_for[task: def(Int, mut T) thin -> None](n_tasks, ref state: T, num_workers=0) raises` | starts `min(n_tasks, num_workers or num_cpus())` threads that pull indices off one shared atomic counter; joins all before returning; `state` is alive for the whole call and must be a mutable binding |
+| `parallel_for` (opaque) | `parallel_for[work: def(Int, OpaquePtr) thin -> None](n_tasks, ctx, num_workers=0) raises` | the same scheduler on a raw pointer; the caller keeps `ctx` alive |
 | `spawn_n` | `spawn_n[start](n, ctx, stride=0) raises -> ThreadGroup` | thread `i` gets `ctx + i * stride`; a partial failure joins what already started |
 | `ThreadGroup` | `.join_all()`, `.pin_all()`, `len()` | move-only; `join_all` attempts every join even if one fails |
 
@@ -307,7 +343,7 @@ $ pixi run test              # nightly
 $ pixi run -e stable test    # Mojo 1.0.0
 ```
 
-35 tests on each environment, on both platforms. The load-bearing ones are the
+38 tests on each environment, on both platforms. The load-bearing ones are the
 races, each written so a broken primitive produces a *wrong number* rather than
 a flake:
 
