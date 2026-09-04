@@ -62,4 +62,4 @@ stable = ["stable"]
 # Added by `pixi shelf add lint-mojo`: the linter comes from GitHub as a pixi
 # source dependency pinned at the revision mojoshelf published, and builds
 # the `mojolint` executable into every environment next to mojo-lsp-server.
-lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "2a12807b7847984aff2c8bf148b0eb7515a99844" }
+lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "3fa66644756c1de7aece83e5a89375323b6e0ce7" }
