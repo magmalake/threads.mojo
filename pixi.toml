@@ -18,6 +18,21 @@ bench = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -o build/thre
 # mojolint (lint-mojo, below): the origin and threading mistakes the compiler
 # lets through, with mojo-lsp-server behind the rules. Exit 1 on findings.
 lint = { cmd = "mojolint --lsp -I src src tests" }
+# `stress` is the same primitives as `test`, but under contention and on
+# repeat; `stress-tsan` is that program built with `--sanitize thread`, which
+# turns a data race anywhere in the library into a failed task. The verdict is
+# a grep for `WARNING: ThreadSanitizer` rather than the exit code, and a
+# POSIX-sh watchdog kills a hung join instead of letting it eat a runner for
+# six hours — see the header of tests/run_stress.sh.
+#
+# Which sanitizer works is a property of the toolchain: with Mojo 1.0.0
+# `stress-tsan` runs on osx-arm64 and aborts before `main` on linux-64 (the
+# runtime's TCMalloc against TSan's address-space reservation), while
+# `stress-asan` is the reverse — it does not link on osx-arm64 and runs, with
+# LeakSanitizer, on linux-64. CI runs each where it works.
+stress = { cmd = "tests/run_stress.sh plain" }
+stress-tsan = { cmd = "tests/run_stress.sh tsan" }
+stress-asan = { cmd = "tests/run_stress.sh asan" }
 check = { depends-on = ["test", "cli", "lint"] }
 fmt = { cmd = "mojo format src tests" }
 # `mojo format` has no check mode in 1.0.0 — it rejects `--check`, and there is

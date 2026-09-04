@@ -417,6 +417,58 @@ a flake:
 - **Stress** — 500 sequential spawn/joins, 50 back-to-back `parallel_for`
   rounds, 50 `WorkerPool`s started and shut down back to back.
 
+### Under a sanitizer
+
+A test that gets the right number proves the number, not the ordering: a race
+that happens to interleave benignly on this machine, this run, still passes.
+So the suite has a second half that is a *detector* rather than an assertion.
+
+```console
+$ pixi run -e stable stress          # no sanitizer, 300 rounds
+$ pixi run -e stable stress-tsan     # --sanitize thread, zero tolerance
+$ pixi run -e stable stress-asan     # --sanitize address, + LeakSanitizer
+```
+
+`tests/stress_threads.mojo` runs the typed and opaque `parallel_for` at 1, 2,
+4, 10 and an oversubscribed 64 workers, starts and stops 50 `TypedPool`s and
+50 `WorkerPool`s — alternating `shutdown()` with dropping the pool, so the
+destructor's stop/join path is covered as often as the explicit one — and
+hammers one `AtomicCounter` from every core. TSan only reasons about code that
+actually ran, so the sweep is the point. Every phase also checks its
+arithmetic, because a lost update must fail even on a run where the sanitizer
+saw nothing.
+
+These are **zero-tolerance gates**: `tests/run_stress.sh` greps the run for
+`WARNING: ThreadSanitizer` / `ERROR: AddressSanitizer` / `ERROR:
+LeakSanitizer` and fails the task on any hit, rather than trusting an exit code
+that has moved between sanitizer versions. It also puts a POSIX-sh watchdog
+around the run — macOS ships no `timeout(1)` — so a hung join fails in minutes
+instead of eating a runner, and the watchdog self-tests against `sleep` on
+every invocation.
+
+The gate is only worth having because the library is clean under it: the
+atomics here lower to instructions TSan models, so a correct program produces
+**zero** warnings and any warning is a real finding. The same build on a
+deliberately racy task — a plain `t.sum = t.sum + i` in a `parallel_for` body —
+reports the race and names both accesses in `_parallel_worker`.
+
+**Which sanitizer runs where is the toolchain's decision, not a preference.**
+With Mojo 1.0.0:
+
+| | osx-arm64 | linux-64 |
+|---|---|---|
+| `--sanitize thread` | works | links, then aborts before `main` |
+| `--sanitize address` | does not link | works, LeakSanitizer included |
+
+On linux-64 a TSan binary dies in startup with `MmapAligned() failed … TCMalloc
+assumes a 48-bit virtual address space` — the runtime's bundled TCMalloc cannot
+find a 1 GiB-aligned mapping inside what TSan has reserved. A hello-world fails
+identically and disabling ASLR does not help, so it is the toolchain rather
+than any program. On osx-arm64 an ASan build fails to link with undefined
+`___asan_version_mismatch_check_v8`, with or without `--shared-libasan`. CI
+therefore runs `stress` on both platforms, `stress-tsan` on macOS and
+`stress-asan` on Linux, which between them covers both tools.
+
 ## Credits and license
 
 The threading primitives here are distilled from
