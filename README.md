@@ -207,7 +207,7 @@ consequences of it being cooperative rather than preemptive:
   parked; `request_stop()` does not interrupt it. If your workers block, the
   thing they block on needs its own wake mechanism — a sentinel, a closed
   channel, a timeout — and the flag is only the second half of the handshake.
-  ([restate.mojo](https://github.com/winding-lines/restate.mojo)'s served mode
+  ([restate.mojo](https://github.com/magmalake/restate.mojo)'s served mode
   is the worked example: its Rust shim grew an `rst_stop` for exactly this.)
 - **A worker that never checks the flag never stops**, so `join()` never
   returns. Loop on `not stop.is_set()`.
@@ -376,8 +376,26 @@ worker count and nothing else.
 decoder already runs at 232 M rows/s on one core and is largely moving bytes,
 so it hits the same memory ceiling the memcpy column above shows at ~4×. Going
 past 8 workers gets slower — 28 row groups over 16 threads is more contention
-than parallelism. The experiment lives in a scratch directory and changes
-nothing in parquet.mojo; it is evidence, not a feature of that repo.
+than parallelism. The experiment lives in a scratch directory and changed
+nothing in parquet.mojo at the time. It is no longer the only way to get this:
+parquet.mojo now threads its own reads, across row groups and column chunks
+together, behind `num_workers`.
+
+## Who uses this
+
+Four tins in the org build on it, which is the tin's own regression suite as
+much as anything:
+
+- **[parquet.mojo](https://github.com/magmalake/parquet.mojo)** — `num_cpus`
+  and `parallel_for` behind `num_workers`, fanning a read out over
+  (row group, column chunk) pairs and assembling Arrow on the workers.
+- **[iceberg.mojo](https://github.com/magmalake/iceberg.mojo)** — `parallel_for`
+  over a scan's files, behind `ScanOptions.num_workers`.
+- **[postgres.mojo](https://github.com/magmalake/postgres.mojo)** — `Mutex` and
+  `CondVar` under a connection pool, so a checkout blocks on a condition
+  variable rather than spinning.
+- **[restate.mojo](https://github.com/magmalake/restate.mojo)** — a `TypedPool`
+  of serve workers sharing an origin-tracked handler state.
 
 ## Tests
 
