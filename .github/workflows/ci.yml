@@ -25,14 +25,37 @@ jobs:
           pixi-version: v0.78.0
           environments: ${{ matrix.env }}
 
+      # Every step below goes through a pixi *task* rather than calling `mojo`
+      # directly, and that is load-bearing now rather than tidiness: the tasks
+      # spell `-I src -I $THREADS_COMPAT`, and `$THREADS_COMPAT` is set to
+      # `compat/stable` or `compat/nightly` by the matching feature's
+      # `[activation.env]` in pixi.toml. So each leg picks up the one
+      # `comptime Cell = Atomic[…]` line its compiler accepts purely by being
+      # the environment it is. A step that invoked `mojo build … -I src` by
+      # hand would fail to find `threads_compat` on both legs.
+      #
+      # The nightly leg is also the regression test for the whole reason that
+      # split exists: `[feature.nightly.dependencies]` floors `modular` at
+      # `26.6.0.dev2026090705`, and the intrinsics this repo used before could
+      # not compile there at all (modular/modular#7094).
+      #
       # Linux is the interesting leg: pthread_setaffinity_np is a real pin
       # there (a no-op on macOS), and the pthread symbols come out of libc
       # rather than libSystem. Both are exercised by the suite.
       - name: Unit tests
         run: pixi run -e ${{ matrix.env }} test
 
+      # Lints `src`, `tests` and this leg's half of `compat` — not all of
+      # `compat`, because `--lsp` type-checks what it lints and the other
+      # half's `Cell` is by construction the spelling this compiler rejects.
+      # Between the two legs both halves are covered.
       - name: Lint (mojolint --lsp)
         run: pixi run -e ${{ matrix.env }} lint
+
+      # `mojo format` is stricter about `compat/` than mojolint is: it only
+      # parses, so it can check both halves on either toolchain.
+      - name: Format check
+        run: pixi run -e ${{ matrix.env }} format-check
 
       - name: Demo CLI builds and runs
         run: |
