@@ -10,6 +10,20 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-08
+
+`threads.atomic` is built on `std.atomic` instead of the `pop.*` compiler
+intrinsics. The two toolchains spell the type differently — `Atomic[DType.int64]`
+on Mojo 1.0.0, `Atomic[Int64]` on nightly — and that is the whole of the
+difference: every call site is identical once an alias hides it. So the divergent
+code is **one line per toolchain**, in `compat/stable/` and `compat/nightly/`,
+picked by the `-I` path; the other 400 lines are single-sourced.
+
+**Consumers of the published tin need no change** — it ships precompiled.
+Consumers building from **source paths** must add the compat directory beside
+`-I ../threads.mojo/src`; this repository sets `$THREADS_COMPAT` per feature and
+its own tasks show the shape.
+
 ### Changed
 - **`threads.atomic` is written on `std.atomic` instead of raw MLIR
   intrinsics.** All seven primitives — `atomic_fetch_add`,
