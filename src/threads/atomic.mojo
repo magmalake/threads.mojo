@@ -58,6 +58,15 @@ of one alias, in a directory the caller selects, is a far smaller and more
 legible surface than a private compiler ABI — and when it breaks it breaks in
 Mojo the language rather than in an attribute grammar nobody documents.
 
+That particular regression was fixed upstream the same day it was reported, so
+the intrinsics would compile again today. This module is not going back to
+them. The reasoning that sent it there — that a compiler primitive is steadier
+than a stdlib signature — was wrong in the way that matters: `std.atomic` is
+the interface with a compatibility promise, and `pop.*` is an implementation
+detail of it. Two spellings of one alias is the cost of being on the supported
+side of that line, and it is a cost worth paying whether or not the
+undocumented side happens to work this week.
+
 Expect `compat/` to grow. The 1.0 and nightly toolchains are diverging rather
 than converging, and `async` is the next thing this tin will want that they
 spell differently. The pattern to follow is the one here: the divergent file
