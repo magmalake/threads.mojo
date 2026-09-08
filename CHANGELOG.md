@@ -10,6 +10,21 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-08
+
+Documentation only. No code, no signature and no build input changed — the
+artifact is equivalent to 0.5.0, and there is no behavioural reason to upgrade.
+
+### Changed
+- `threads.atomic`'s module docstring now says why the module *stays* on
+  `std.atomic` now that the nightly regression that first forced the move
+  ([modular/modular#7094](https://github.com/modular/modular/issues/7094)) has
+  been fixed upstream. The intrinsics would compile again today; the module is
+  not going back to them, because `std.atomic` is the interface carrying a
+  compatibility promise and `pop.*` is an implementation detail of it. Worth
+  writing down, since the next reader will otherwise find a workaround whose
+  stated reason no longer holds and conclude it can be reverted.
+
 ## [0.5.0] - 2026-09-08
 
 `threads.atomic` is built on `std.atomic` instead of the `pop.*` compiler
