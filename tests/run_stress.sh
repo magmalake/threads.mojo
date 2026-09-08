@@ -106,6 +106,12 @@ selftest_watchdog
 
 tasks="${STRESS_TASKS:-4096}"
 
+# The toolchain shim `threads.atomic` imports `Cell` from — see the comment
+# above `[tasks]` in pixi.toml. Every pixi environment exports it on
+# activation; the fallback is for running this script by hand outside pixi,
+# where stable is the toolchain a bare `mojo` on PATH is most likely to be.
+compat="${THREADS_COMPAT:-compat/stable}"
+
 case "$mode" in
 plain)
     rounds="${STRESS_ROUNDS:-300}"
@@ -114,7 +120,7 @@ plain)
     log=build/stress.log
     verdict=
     echo "run_stress: building $binary"
-    mojo build tests/stress_threads.mojo -I src -o "$binary"
+    mojo build tests/stress_threads.mojo -I src -I "$compat" -o "$binary"
     ;;
 tsan)
     rounds="${STRESS_ROUNDS:-100}"
@@ -123,7 +129,7 @@ tsan)
     log=build/stress-tsan.log
     verdict="WARNING: ThreadSanitizer"
     echo "run_stress: building $binary with --sanitize thread"
-    mojo build --sanitize thread tests/stress_threads.mojo -I src -o "$binary"
+    mojo build --sanitize thread tests/stress_threads.mojo -I src -I "$compat" -o "$binary"
     TSAN_OPTIONS="${TSAN_OPTIONS:-halt_on_error=1}"
     export TSAN_OPTIONS
     export_symbolizer
@@ -137,7 +143,7 @@ asan)
     log=build/stress-asan.log
     verdict="ERROR: (Address|Leak)Sanitizer"
     echo "run_stress: building $binary with --sanitize address"
-    mojo build --sanitize address tests/stress_threads.mojo -I src -o "$binary"
+    mojo build --sanitize address tests/stress_threads.mojo -I src -I "$compat" -o "$binary"
     # LeakSanitizer rides along with ASan on Linux and is the reason this leg
     # earns its keep: every phase here allocates a worker block or a pool
     # header and frees it after the joins, so a leak is a real finding.

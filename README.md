@@ -39,7 +39,19 @@ threads-mojo = { git = "https://github.com/magmalake/threads.mojo" }
 ```
 
 or, like the rest of magmalake, by source path: check the repo out next to
-yours and add `-I ../threads.mojo/src` to your `mojo build`.
+yours and add **two** include paths to your `mojo build` — `src`, and the
+`compat/` directory for the toolchain you are building with:
+
+```sh
+mojo build … -I ../threads.mojo/src -I ../threads.mojo/compat/stable    # Mojo 1.0.0
+mojo build … -I ../threads.mojo/src -I ../threads.mojo/compat/nightly   # nightly
+```
+
+The second one holds a single `comptime Cell = …` line and is how this tin
+compiles on both toolchains without forking; see
+[Why this does not just re-export `std.atomic`](#why-this-does-not-just-re-export-stdatomic)
+below. Consumers taking the published tin need neither — the conda package is
+precompiled.
 
 ## Quick start
 
@@ -294,19 +306,45 @@ section. That is a silent correctness bug rather than a compile error. Use
 
 ## Why this does not just re-export `std.atomic`
 
-Because the two toolchains this tin targets disagree about what `Atomic` is:
+It does, now — but it cannot do so from a single file, because the two
+toolchains this tin targets disagree about what `Atomic` is:
 
 | toolchain | declaration | the only spelling it accepts |
 |---|---|---|
 | Mojo 1.0.0 | `struct Atomic[dtype: DType, ...]` | `Atomic[DType.int64]` |
-| nightly 1.1.0.dev2026083005 | `struct Atomic[T: Deinitable & Movable, ...]` | `Atomic[Int64]` |
+| nightly | `struct Atomic[T: Deinitable & Movable, ...]` | `Atomic[Int64]` |
 
-Neither spelling compiles on the other compiler, and Mojo exposes no
-compiler-version constant to branch on. So `threads.atomic` goes one level
-down, to the `pop.atomic.rmw` / `pop.load` / `pop.store` / `pop.fence`
-intrinsics that `std.atomic` is itself written on top of — those are identical
-on both. Bridging that gap is half of what this tin is for: your code writes
-one spelling and keeps compiling across the split.
+Neither spelling compiles on the other compiler, Mojo exposes no
+compiler-version constant to branch on, and a type cannot be chosen by a
+`comptime if` at module scope in any case. Everything *else* is identical:
+`fetch_add[ordering=…]`, `load[ordering=…]`, `store[ordering=…]` and `fence`
+compile unchanged against either declaration. So the divergence is confined to
+one line, in a file the include path selects:
+
+```mojo
+# compat/stable/threads_compat.mojo      # compat/nightly/threads_compat.mojo
+comptime Cell = Atomic[DType.int64]      # comptime Cell = Atomic[Int64]
+```
+
+Bridging that gap is half of what this tin is for: your code writes one
+spelling and keeps compiling across the split. The cost is the extra `-I` in
+[Install](#install).
+
+Until September 2026 this was solved one level *down* instead, by reaching past
+`std.atomic` to the `pop.atomic.rmw` / `pop.load` / `pop.store` / `pop.fence`
+intrinsics it is itself written on top of, on the theory that a compiler
+primitive would be steadier than a stdlib signature. It was not: nightlies from
+`26.6.0.dev2026090105` onward reject the `__mlir_attr` syntax those calls need
+([modular/modular#7094](https://github.com/modular/modular/issues/7094)), and
+because `threads.atomic` was the only file in all of magmalake touching raw
+MLIR, it was single-handedly holding every tin downstream of it below that
+nightly. There is no raw MLIR left in this repo.
+
+Expect `compat/` to grow rather than shrink — 1.0 and nightly are diverging,
+and `async` is the next thing this tin will want that they spell differently.
+The rule for anything added there is the rule the `Cell` split follows: the
+divergent file holds the declaration that differs and nothing else, so the
+entire delta between the two toolchains fits on a screen.
 
 Two smaller portability notes baked in for the same reason: `Pointer` is
 non-nullable on both toolchains now (`constraint failed: Pointer is
