@@ -196,6 +196,32 @@ struct ThreadHandle(Movable):
             pass
 
 
+def pin_current_to_cpu(cpu: Int) raises:
+    """Pin the *calling* thread to one logical CPU.
+
+    `ThreadHandle.pin_to_cpu` pins a thread you spawned; this pins the one you
+    are on. That is the more common shape in a worker pool, where each worker
+    picks its own core after starting rather than having the spawner reach in.
+
+    A free function rather than a `ThreadHandle` built from `pthread_self`
+    deliberately: such a handle would look joinable, and joining it means a
+    thread joining itself. There is no safe handle for "me", only operations.
+
+    On Linux a real affinity set; on macOS a documented no-op, for the reason
+    given on `ThreadHandle.pin_to_cpu`.
+
+    Args:
+        cpu: Zero-based logical CPU index.
+
+    Raises:
+        Error: On Linux if `pthread_setaffinity_np` fails — typically `EINVAL`
+            for a cpu outside the process's cpuset, as in a restricted
+            container. Never raises on macOS.
+    """
+    var me = ThreadHandle(_thread_id=current_thread_id())
+    me.pin_to_cpu(cpu)
+
+
 # ── Process- and thread-level queries ────────────────────────────────────────
 
 
