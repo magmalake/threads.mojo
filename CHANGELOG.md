@@ -10,6 +10,20 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-16
+
+### Added
+- `threads.thread.pin_current_to_cpu(cpu)` pins the calling thread.
+  `ThreadHandle.pin_to_cpu` pins a thread you spawned; pinning the one you
+  are already on had no API, which is the more common shape in a worker pool
+  where each worker picks its own core after starting rather than the spawner
+  reaching in. Callers were faking it by building a `ThreadHandle` from
+  `pthread_self()`.
+
+  A free function rather than a public constructor from a raw id: such a
+  handle would look joinable, and joining it means a thread joining itself.
+  There is no safe handle for "me", only operations on it.
+
 ## [0.5.1] - 2026-09-08
 
 Documentation only. No code, no signature and no build input changed — the
