@@ -1,4 +1,4 @@
-"""Atomics that compile on Mojo 1.0.0 *and* on current nightly.
+"""Atomics that compile on Mojo 1.1.0 *and* on current nightly.
 
 Everything here operates on a **naturally aligned 64-bit cell at an address you
 own**. That is on purpose: atomics are only interesting between threads, and
@@ -19,32 +19,35 @@ sequentially consistent; that is what a work-queue counter wants.
 
 ## Why `Cell` comes from outside this file
 
-`std.atomic.Atomic` changed its parameter *kind* between the two toolchains this
-tin targets:
+`std.atomic.Atomic` changed its parameter *kind* under this tin once already:
 
 | toolchain | declaration |
 |---|---|
 | Mojo 1.0.0 | `struct Atomic[dtype: DType, *, scope: StaticString = ""]` |
-| nightly | `struct Atomic[T: Deinitable & Movable, *, scope: ...]` |
+| Mojo 1.1.0, nightly | `struct Atomic[T: Deinitable & Movable, *, scope: ...]` |
 
-so `Atomic[DType.int64]` is the only spelling stable accepts and `Atomic[Int64]`
-is the only spelling nightly accepts. Everything else is identical — the same
-`fetch_add[ordering=…]`, `load[ordering=…]`, `store[ordering=…]` and `fence`
-calls compile unchanged against either. The divergence is one type expression
-and nothing more.
+so `Atomic[DType.int64]` was the only spelling 1.0.0 accepted and `Atomic[Int64]`
+is the only spelling the two toolchains supported today accept. Everything else
+was identical — the same `fetch_add[ordering=…]`, `load[ordering=…]`,
+`store[ordering=…]` and `fence` calls compile unchanged against any of them.
+The divergence was one type expression and nothing more.
 
 Mojo offers no way to pick a *type* at module scope from a compiler-version
 predicate: a `comptime if` around a `comptime Cell = …` does not parse on either
 toolchain, and `-D` defines (`get_defined_bool` plus a `comptime if`) can only
 branch inside a function body. So the choice is made by the include path
-instead. `compat/stable/threads_compat.mojo` and
-`compat/nightly/threads_compat.mojo` each declare `Cell` and nothing else, and a
-build says which one it means:
+instead. `compat/threads_compat.mojo` declares `Cell` and nothing else, and a
+build says so:
 
 ```sh
-mojo build … -I src -I compat/stable    # Mojo 1.0.0
-mojo build … -I src -I compat/nightly   # nightly
+mojo build … -I src -I compat
 ```
+
+Dropping Mojo 1.0.0 left that directory with one occupant rather than two: 1.1.0
+and the 26.7 nightlies agree on every spelling here. The seam stays because the
+next divergence is a matter of when, not whether, and re-splitting `compat/` into
+one directory per toolchain is then a two-line change in this tin and a path edit
+in each consumer.
 
 This used to be solved one level *down* instead, by reaching past `std.atomic`
 to the `pop.atomic.rmw` / `pop.load` / `pop.store` intrinsics it is itself
@@ -67,8 +70,8 @@ detail of it. Two spellings of one alias is the cost of being on the supported
 side of that line, and it is a cost worth paying whether or not the
 undocumented side happens to work this week.
 
-Expect `compat/` to grow. The 1.0 and nightly toolchains are diverging rather
-than converging, and `async` is the next thing this tin will want that they
+Expect `compat/` to grow again. Stable and nightly diverge as readily as they
+converge, and `async` is the next thing this tin will want that they may well
 spell differently. The pattern to follow is the one here: the divergent file
 holds the declaration that differs and nothing whatsoever besides, so that a
 reader can see the entire delta between the two toolchains at a glance and every
