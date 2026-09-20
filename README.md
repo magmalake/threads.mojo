@@ -39,16 +39,14 @@ threads-mojo = { git = "https://github.com/magmalake/threads.mojo" }
 ```
 
 or, like the rest of magmalake, by source path: check the repo out next to
-yours and add **two** include paths to your `mojo build` — `src`, and the
-`compat/` directory for the toolchain you are building with:
+yours and add **two** include paths to your `mojo build` — `src`, and `compat`:
 
 ```sh
-mojo build … -I ../threads.mojo/src -I ../threads.mojo/compat/stable    # Mojo 1.0.0
-mojo build … -I ../threads.mojo/src -I ../threads.mojo/compat/nightly   # nightly
+mojo build … -I ../threads.mojo/src -I ../threads.mojo/compat
 ```
 
 The second one holds a single `comptime Cell = …` line and is how this tin
-compiles on both toolchains without forking; see
+compiles on every supported toolchain without forking; see
 [Why this does not just re-export `std.atomic`](#why-this-does-not-just-re-export-stdatomic)
 below. Consumers taking the published tin need neither — the conda package is
 precompiled.

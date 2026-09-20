@@ -27,17 +27,19 @@ jobs:
 
       # Every step below goes through a pixi *task* rather than calling `mojo`
       # directly, and that is load-bearing now rather than tidiness: the tasks
-      # spell `-I src -I $THREADS_COMPAT`, and `$THREADS_COMPAT` is set to
-      # `compat/stable` or `compat/nightly` by the matching feature's
-      # `[activation.env]` in pixi.toml. So each leg picks up the one
-      # `comptime Cell = Atomic[…]` line its compiler accepts purely by being
-      # the environment it is. A step that invoked `mojo build … -I src` by
-      # hand would fail to find `threads_compat` on both legs.
+      # spell `-I src -I $THREADS_COMPAT`, and `$THREADS_COMPAT` is set by the
+      # matching feature's `[activation.env]` in pixi.toml. Mojo 1.1.0 and the
+      # 26.7 nightlies accept the same `comptime Cell = Atomic[…]` line, so
+      # both point at plain `compat` today; the indirection is what lets a
+      # future divergence split that directory per toolchain without touching
+      # a task or a step. A step that invoked `mojo build … -I src` by hand
+      # would fail to find `threads_compat` on both legs.
       #
       # The nightly leg is also the regression test for the whole reason that
-      # split exists: `[feature.nightly.dependencies]` floors `modular` at
-      # `26.6.0.dev2026090705`, and the intrinsics this repo used before could
-      # not compile there at all (modular/modular#7094).
+      # split exists: `[feature.nightly.dependencies]` floors `modular` on the
+      # 26.7 line, well past `26.6.0.dev2026090705`, and the intrinsics this
+      # repo used before could not compile there at all
+      # (modular/modular#7094).
       #
       # Linux is the interesting leg: pthread_setaffinity_np is a real pin
       # there (a no-op on macOS), and the pthread symbols come out of libc

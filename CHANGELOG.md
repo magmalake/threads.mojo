@@ -10,6 +10,30 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-20
+
+### Changed
+- **Breaking for source consumers:** the compat directory is now plain
+  `compat/`, not `compat/stable` and `compat/nightly`. A build that spells
+  `-I ../threads.mojo/compat/nightly` has to become
+  `-I ../threads.mojo/compat`. Consumers of the published tin are unaffected;
+  the conda package is precompiled and never exposed the path.
+
+  The split existed because `std.atomic.Atomic` took a `DType` on Mojo 1.0.0
+  and takes a type everywhere since. Dropping 1.0.0 leaves the two supported
+  toolchains — 1.1.0 and the 26.7 nightlies — agreeing on every spelling in
+  the directory, so keeping two byte-identical files whose docstrings claim
+  they differ would be worse than keeping none. The mechanism stays: one
+  directory selected by the include path, `$THREADS_COMPAT` still set per
+  feature, so the next divergence splits it back apart without touching a
+  task, a step or a consumer's task definition beyond the path.
+- Builds on **Mojo 1.1.0** (`stable`) and the **26.7.0.dev** nightlies
+  (`default`). `[package.host-dependencies]` and `[package.build-dependencies]`
+  pin `mojo-compiler ==1.1.0` and the run dependency floors at `1.1.0`: a
+  precompiled Mojo package is stamped with the compiler that produced it and
+  refused by any other, so this tin's artifact is not loadable by 1.0.0 and
+  1.0.0's is not loadable here.
+
 ## [0.5.2] - 2026-09-16
 
 ### Added

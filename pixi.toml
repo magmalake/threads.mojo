@@ -2,23 +2,25 @@
 authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 name = "threads.mojo"
-version = "0.5.2"
+version = "0.6.0"
 description = "Minimal pthreads for Mojo — spawn/join, atomics, a mutex, parallel_for, and a WorkerPool (typed or untyped). No dependencies."
 preview = ["pixi-build"]
 platforms = ["osx-arm64", "linux-64"]
 
-# `$THREADS_COMPAT` is the one-line toolchain shim: `compat/stable` holds
-# `comptime Cell = Atomic[DType.int64]` and `compat/nightly` holds
-# `comptime Cell = Atomic[Int64]`, which is the entire difference between
-# building this tin on Mojo 1.0.0 and on nightly. It is set per feature under
-# `[feature.*.activation.env]` below rather than written into each task, so
-# adding a toolchain means adding a directory and one activation line and
-# touching no task at all. Every build of this repo, and every consumer that
-# compiles `src/` from source, needs it on the include path alongside `src`.
+# `$THREADS_COMPAT` is the toolchain shim: a directory holding the handful of
+# declarations that supported Mojo toolchains spell differently, today just
+# `comptime Cell = Atomic[Int64]`. Mojo 1.1.0 and the 26.7 nightlies agree on
+# that, so there is one such directory — plain `compat` — and both features
+# point at it; while 1.0.0 was supported there were two. It is set per feature
+# under `[feature.*.activation.env]` below rather than written into each task,
+# so a toolchain that diverges again means adding a directory and one
+# activation line and touching no task at all. Every build of this repo, and
+# every consumer that compiles `src/` from source, needs it on the include
+# path alongside `src`.
 #
 # Pure Mojo + libpthread (libSystem on macOS, libc on modern glibc), so there
 # is nothing to link and nothing to dlopen — consumers just
-# `-I ../threads.mojo/src -I ../threads.mojo/compat/<toolchain>`.
+# `-I ../threads.mojo/src -I ../threads.mojo/compat`.
 # Tests are *built* rather than `mojo run`, because the JIT path and the
 # compiled path have different threading behaviour worth pinning.
 [tasks]
@@ -27,10 +29,10 @@ cli = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -I $THREADS_COM
 bench = { cmd = "mkdir -p build && mojo build src/main.mojo -I src -I $THREADS_COMPAT -o build/threads-mojo && ./build/threads-mojo bench" }
 # mojolint (lint-mojo, below): the origin and threading mistakes the compiler
 # lets through, with mojo-lsp-server behind the rules. Exit 1 on findings.
-# The lint target is `$THREADS_COMPAT` rather than all of `compat`, because
-# `--lsp` type-checks what it lints and the sibling toolchain's `Cell` is by
-# construction the one spelling this compiler rejects. Each half is linted by
-# the CI leg that can compile it, which between the two legs is all of them.
+# The lint target is `$THREADS_COMPAT` rather than a literal `compat`, because
+# `--lsp` type-checks what it lints: should the directory split per toolchain
+# again, the sibling's `Cell` would be by construction the one spelling this
+# compiler rejects, and each half has to be linted by the leg that compiles it.
 lint = { cmd = "mojolint --lsp -I src -I $THREADS_COMPAT src tests $THREADS_COMPAT" }
 # `stress` is the same primitives as `test`, but under contention and on
 # repeat; `stress-tsan` is that program built with `--sanitize thread`, which
@@ -39,8 +41,8 @@ lint = { cmd = "mojolint --lsp -I src -I $THREADS_COMPAT src tests $THREADS_COMP
 # POSIX-sh watchdog kills a hung join instead of letting it eat a runner for
 # six hours — see the header of tests/run_stress.sh.
 #
-# Which sanitizer works is a property of the toolchain: with Mojo 1.0.0
-# `stress-tsan` runs on osx-arm64 and aborts before `main` on linux-64 (the
+# Which sanitizer works is a property of the toolchain: on the two supported
+# here `stress-tsan` runs on osx-arm64 and aborts before `main` on linux-64 (the
 # runtime's TCMalloc against TSan's address-space reservation), while
 # `stress-asan` is the reverse — it does not link on osx-arm64 and runs, with
 # LeakSanitizer, on linux-64. CI runs each where it works.
@@ -49,7 +51,7 @@ stress-tsan = { cmd = "tests/run_stress.sh tsan" }
 stress-asan = { cmd = "tests/run_stress.sh asan" }
 check = { depends-on = ["test", "cli", "lint"] }
 fmt = { cmd = "mojo format src tests compat" }
-# `mojo format` has no check mode in 1.0.0 — it rejects `--check`, and there is
+# `mojo format` has no check mode in 1.1.0 — it rejects `--check`, and there is
 # none among the hidden options either — so the check is: format, then assert the
 # tree did not move. It rewrites the files as a side effect, which is what CI
 # wants and is harmless locally; run it with your own work committed or stashed.
@@ -59,48 +61,49 @@ format-check = { cmd = "mojo format src tests compat && git diff --exit-code -- 
 # Conda package name is threads-mojo; the Mojo import stays `from threads import …`.
 [package]
 name = "threads-mojo"
-version = "0.5.2"
+version = "0.6.0"
 
 [package.build]
 backend = { name = "pixi-build-mojo", version = "0.*" }
 
-# The conda package is built with the pinned `mojo-compiler ==1.0.0` below, so
-# it precompiles against the stable spelling of `Cell`. `extra-args` is spliced
+# The conda package is built with the pinned `mojo-compiler ==1.1.0` below, so
+# it precompiles against that toolchain's spelling of `Cell`. `extra-args` is spliced
 # unquoted into the backend's `mojo precompile` line ahead of the package path,
 # which is the only hook it offers for an include path. It has to be absolute:
 # the generated script runs from rattler-build's work directory, not from here,
-# so a relative `compat/stable` resolves to nothing. `$RECIPE_DIR` is the
+# so a relative `compat` resolves to nothing. `$RECIPE_DIR` is the
 # manifest's own directory and is exported into that script's environment.
 [package.build.config.pkg]
 path = "src/threads"
 name = "threads"
-extra-args = ["-I", "$RECIPE_DIR/compat/stable"]
+extra-args = ["-I", "$RECIPE_DIR/compat"]
 
 [package.host-dependencies]
-mojo-compiler = "==1.0.0"
+mojo-compiler = "==1.1.0"
 
 [package.build-dependencies]
-mojo-compiler = "==1.0.0"
+mojo-compiler = "==1.1.0"
 
 [package.run-dependencies]
-mojo-compiler = ">=1.0.0,<2"
+mojo-compiler = ">=1.1.0,<2"
 
-# Floored past `26.6.0.dev2026090105`, which is where nightly began rejecting
+# The 26.7 line, which is what follows the 26.6 series Mojo 1.1.0 was cut from.
+# It is comfortably past `26.6.0.dev2026090105`, where nightly began rejecting
 # the `__mlir_attr` syntax this tin used to reach `pop.atomic.rmw` with
-# (modular/modular#7094). Building here is the proof that the `std.atomic`
-# rewrite did what it was for; anything below that floor would let the leg pass
-# on a toolchain that never had the problem, and the fix would be untested.
+# (modular/modular#7094); building here is still the proof that the
+# `std.atomic` rewrite did what it was for, on a toolchain that had the
+# problem rather than one that predates it.
 [feature.nightly.dependencies]
-modular = ">=26.6.0.dev2026090705,<27"
+modular = ">=26.7.0.dev2026092005,<28"
 
 [feature.nightly.activation.env]
-THREADS_COMPAT = "compat/nightly"
+THREADS_COMPAT = "compat"
 
 [feature.stable.dependencies]
-mojo-compiler = "==1.0.0"
+mojo-compiler = "==1.1.0"
 
 [feature.stable.activation.env]
-THREADS_COMPAT = "compat/stable"
+THREADS_COMPAT = "compat"
 
 [environments]
 default = ["nightly"]
