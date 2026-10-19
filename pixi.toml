@@ -94,7 +94,7 @@ mojo-compiler = ">=1.1.0,<2"
 # `std.atomic` rewrite did what it was for, on a toolchain that had the
 # problem rather than one that predates it.
 [feature.nightly.dependencies]
-modular = ">=26.7.0.dev2026092005,<28"
+modular = ">=26.7.0.dev2026101905,<28"
 
 [feature.nightly.activation.env]
 THREADS_COMPAT = "compat"
