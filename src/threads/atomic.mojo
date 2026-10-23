@@ -1,4 +1,4 @@
-"""Atomics that compile on Mojo 1.1.0 *and* on current nightly.
+"""Atomics that compile on Mojo 1.2.0 *and* on current nightly.
 
 Everything here operates on a **naturally aligned 64-bit cell at an address you
 own**. That is on purpose: atomics are only interesting between threads, and
@@ -24,7 +24,7 @@ sequentially consistent; that is what a work-queue counter wants.
 | toolchain | declaration |
 |---|---|
 | Mojo 1.0.0 | `struct Atomic[dtype: DType, *, scope: StaticString = ""]` |
-| Mojo 1.1.0, nightly | `struct Atomic[T: Deinitable & Movable, *, scope: ...]` |
+| Mojo 1.2.0, nightly | `struct Atomic[T: Deinitable & Movable, *, scope: ...]` |
 
 so `Atomic[DType.int64]` was the only spelling 1.0.0 accepted and `Atomic[Int64]`
 is the only spelling the two toolchains supported today accept. Everything else
@@ -43,8 +43,8 @@ build says so:
 mojo build … -I src -I compat
 ```
 
-Dropping Mojo 1.0.0 left that directory with one occupant rather than two: 1.1.0
-and the 26.7 nightlies agree on every spelling here. The seam stays because the
+Dropping Mojo 1.0.0 left that directory with one occupant rather than two: 1.2.0
+and the 1.3.0.dev nightlies agree on every spelling here. The seam stays because the
 next divergence is a matter of when, not whether, and re-splitting `compat/` into
 one directory per toolchain is then a two-line change in this tin and a path edit
 in each consumer.

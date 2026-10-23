@@ -9,7 +9,7 @@ platforms = ["osx-arm64", "linux-64"]
 
 # `$THREADS_COMPAT` is the toolchain shim: a directory holding the handful of
 # declarations that supported Mojo toolchains spell differently, today just
-# `comptime Cell = Atomic[Int64]`. Mojo 1.1.0 and the 26.7 nightlies agree on
+# `comptime Cell = Atomic[Int64]`. Mojo 1.2.0 and the 1.3.0.dev nightlies agree on
 # that, so there is one such directory — plain `compat` — and both features
 # point at it; while 1.0.0 was supported there were two. It is set per feature
 # under `[feature.*.activation.env]` below rather than written into each task,
@@ -66,7 +66,7 @@ version = "0.6.0"
 [package.build]
 backend = { name = "pixi-build-mojo", version = "0.*" }
 
-# The conda package is built with the pinned `mojo-compiler ==1.1.0` below, so
+# The conda package is built with the pinned `mojo-compiler ==1.2.0` below, so
 # it precompiles against that toolchain's spelling of `Cell`. `extra-args` is spliced
 # unquoted into the backend's `mojo precompile` line ahead of the package path,
 # which is the only hook it offers for an include path. It has to be absolute:
@@ -79,28 +79,28 @@ name = "threads"
 extra-args = ["-I", "$RECIPE_DIR/compat"]
 
 [package.host-dependencies]
-mojo-compiler = "==1.1.0"
+mojo-compiler = "==1.2.0"
 
 [package.build-dependencies]
-mojo-compiler = "==1.1.0"
+mojo-compiler = "==1.2.0"
 
 [package.run-dependencies]
-mojo-compiler = ">=1.1.0,<2"
+mojo-compiler = ">=1.2.0,<2"
 
-# The 26.7 line, which is what follows the 26.6 series Mojo 1.1.0 was cut from.
+# The 26.8 line (Mojo 1.3.0.dev), which follows the 26.7 series Mojo 1.2.0 was cut from.
 # It is comfortably past `26.6.0.dev2026090105`, where nightly began rejecting
 # the `__mlir_attr` syntax this tin used to reach `pop.atomic.rmw` with
 # (modular/modular#7094); building here is still the proof that the
 # `std.atomic` rewrite did what it was for, on a toolchain that had the
 # problem rather than one that predates it.
 [feature.nightly.dependencies]
-modular = ">=26.7.0.dev2026101905,<28"
+modular = ">=26.8.0.dev2026102305,<28"
 
 [feature.nightly.activation.env]
 THREADS_COMPAT = "compat"
 
 [feature.stable.dependencies]
-mojo-compiler = "==1.1.0"
+mojo-compiler = "==1.2.0"
 
 [feature.stable.activation.env]
 THREADS_COMPAT = "compat"

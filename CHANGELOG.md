@@ -10,6 +10,11 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+### Changed
+- Builds on **Mojo 1.2.0** (`stable`) and the **26.8.0.dev** (Mojo 1.3.0.dev)
+  nightlies. `compat/` still has one directory: 1.2.0 and 1.3.0.dev agree on
+  `Atomic[Int64]`. Package pins move to `mojo-compiler ==1.2.0`, run floor `1.2.0`.
+
 ## [0.6.0] - 2026-09-20
 
 ### Changed
