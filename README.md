@@ -17,7 +17,7 @@ Mojo code: `parallelize` was removed from `std.algorithm`, and no thread pool
 is reachable from `std`. If you want a second core, you call `pthread_create`
 yourself. This tin is that call, done once, carefully, and tested.
 
-Works on **Mojo 1.1.0 (stable) and current nightly**, on **linux-64** and
+Works on **Mojo 1.2.0 (stable) and current nightly**, on **linux-64** and
 **osx-arm64** — all four combinations in CI.
 
 ## Install
@@ -437,7 +437,7 @@ much as anything:
 
 ```console
 $ pixi run test              # nightly
-$ pixi run -e stable test    # Mojo 1.1.0
+$ pixi run -e stable test    # Mojo 1.2.0
 ```
 
 The tests run on each environment, on both platforms. The load-bearing ones are the
