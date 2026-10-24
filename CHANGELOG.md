@@ -10,6 +10,8 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-24
+
 ### Changed
 - Builds on **Mojo 1.2.0** (`stable`) and the **26.8.0.dev** (Mojo 1.3.0.dev)
   nightlies. `compat/` still has one directory: 1.2.0 and 1.3.0.dev agree on
