@@ -13,25 +13,23 @@ jobs:
   # below wait for it; the builds are the next one.
   release:
     if: github.event_name == 'pull_request'
-    uses: magmalake/.github/.github/workflows/release-check.yml@release-check
+    uses: magmalake/.github/.github/workflows/release-check.yml@main
     permissions:
       contents: read
       pull-requests: read
     with:
       classify-only: true
-      tools-ref: "release-check"
 
   release-check:
     needs: release
     if: needs.release.outputs.release_only == 'true'
-    uses: magmalake/.github/.github/workflows/release-check.yml@release-check
+    uses: magmalake/.github/.github/workflows/release-check.yml@main
     permissions:
       contents: read
       pull-requests: read
     with:
       # The unit tests run in the stable / ubuntu-latest job below.
       task: ""
-      tools-ref: "release-check"
 
   test:
     needs: release
