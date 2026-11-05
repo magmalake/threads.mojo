@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # macOS runs here, nightly and by hand (Actions > CI > Run workflow), not on
+  # PRs or main: GitHub's hosted macOS pool is short on capacity, and a job
+  # that never gets a runner fails the required `ci` gate.
+  schedule:
+    - cron: '6 8 * * *'
+  workflow_dispatch:
 
 jobs:
   # A release PR (only versions, CHANGELOG.md, revs and locks change; see
@@ -41,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
         env: [default, stable]
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -148,7 +154,7 @@ jobs:
   # The one check to require: every job above passed or, on a release-only PR,
   # was skipped in favour of the release job's consumer build.
   ci:
-    if: ${{ always() }}
+    if: ${{ always() && github.event_name != 'schedule' }}
     needs: [release, release-check, test, stress]
     runs-on: ubuntu-latest
     steps:
