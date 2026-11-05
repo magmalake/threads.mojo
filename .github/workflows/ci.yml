@@ -28,19 +28,21 @@ jobs:
       contents: read
       pull-requests: read
     with:
-      # The unit tests run in the stable / ubuntu-latest job below.
-      task: ""
+      # The test legs below are skipped on release PRs; the unit tests run
+      # here instead, in the stable environment a consumer gets.
+      task: test
+      env: stable
 
   test:
     needs: release
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.release.outputs.release_only != 'true' }}
     name: ${{ matrix.env == 'default' && 'nightly' || matrix.env }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.release.outputs.release_only == 'true' && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest"]') }}
-        env: ${{ fromJSON(needs.release.outputs.release_only == 'true' && '["stable"]' || '["default", "stable"]') }}
+        os: [ubuntu-latest, macos-latest]
+        env: [default, stable]
     steps:
       - uses: actions/checkout@v4
 
