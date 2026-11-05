@@ -8,7 +8,7 @@ on:
   # PRs or main: GitHub's hosted macOS pool is short on capacity, and a job
   # that never gets a runner fails the required `ci` gate.
   schedule:
-    - cron: '75 7 * * *'
+    - cron: '6 8 * * *'
   workflow_dispatch:
 
 jobs:
