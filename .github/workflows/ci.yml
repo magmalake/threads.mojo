@@ -151,11 +151,19 @@ jobs:
         if: runner.os == 'Linux'
         run: pixi run -e stable stress-asan
 
+  # Imports: no cycles between modules, and each name imported from the
+  # module that defines it (github.com/ouromo/customs).
+  customs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ouromo/customs@v0.2.0
+
   # The one check to require: every job above passed or, on a release-only PR,
   # was skipped in favour of the release job's consumer build.
   ci:
     if: ${{ always() && github.event_name != 'schedule' }}
-    needs: [release, release-check, test, stress]
+    needs: [release, release-check, test, stress, customs]
     runs-on: ubuntu-latest
     steps:
       - env:
