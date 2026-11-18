@@ -13,7 +13,6 @@ are named at the top of each test.
 
 from std.memory.alloc import unsafe_alloc
 from std.testing import TestSuite, assert_equal, assert_raises, assert_true
-from std.sys.info import CompilationTarget
 from std.time import perf_counter_ns
 
 from threads import (
@@ -24,7 +23,6 @@ from threads import (
     Mutex,
     MutexRef,
     OpaquePtr,
-    ThreadGroup,
     ThreadHandle,
     TypedPool,
     WorkerPool,

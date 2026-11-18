@@ -105,7 +105,7 @@ that, so the flag is really there to let you skip the scan when nothing failed.
 from std.memory.alloc import unsafe_alloc
 
 from .atomic import AtomicCounter, atomic_store_relaxed
-from .ffi import OpaquePtr, I64Ptr, i64_ptr, opaque_ptr
+from .ffi import OpaquePtr, i64_ptr, opaque_ptr
 from .thread import StartFn, ThreadHandle, num_cpus
 
 
