@@ -107,10 +107,9 @@ selftest_watchdog
 tasks="${STRESS_TASKS:-4096}"
 
 # The toolchain shim `threads.atomic` imports `Cell` from — see the comment
-# above `[tasks]` in pixi.toml. Every pixi environment exports it on
-# activation; the fallback is for running this script by hand outside pixi,
-# where stable is the toolchain a bare `mojo` on PATH is most likely to be.
-compat="${THREADS_COMPAT:-compat/stable}"
+# above `[tasks]` in pixi.toml. The pixi environment exports it on
+# activation; the fallback is for running this script by hand outside pixi.
+compat="${THREADS_COMPAT:-compat}"
 
 case "$mode" in
 plain)

@@ -22,9 +22,9 @@ on a run where the sanitizer saw nothing, which matters because TSan reports
 races it observed, not races that exist.
 
 ```console
-$ pixi run -e stable stress          # no sanitizer, many rounds
-$ pixi run -e stable stress-tsan     # --sanitize thread (osx-arm64)
-$ pixi run -e stable stress-asan     # --sanitize address (linux-64)
+$ pixi run stress          # no sanitizer, many rounds
+$ pixi run stress-tsan     # --sanitize thread (osx-arm64)
+$ pixi run stress-asan     # --sanitize address (linux-64)
 ```
 
 `--rounds N` repeats the whole sweep; `tests/run_stress.sh` picks the count and

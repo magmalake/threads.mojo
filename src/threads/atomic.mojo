@@ -1,4 +1,4 @@
-"""Atomics that compile on Mojo 1.2.0 *and* on current nightly.
+"""Atomics over `std.atomic`, on the pinned Mojo 1.3 nightly.
 
 Everything here operates on a **naturally aligned 64-bit cell at an address you
 own**. That is on purpose: atomics are only interesting between threads, and
@@ -27,7 +27,7 @@ sequentially consistent; that is what a work-queue counter wants.
 | Mojo 1.2.0, nightly | `struct Atomic[T: Deinitable & Movable, *, scope: ...]` |
 
 so `Atomic[DType.int64]` was the only spelling 1.0.0 accepted and `Atomic[Int64]`
-is the only spelling the two toolchains supported today accept. Everything else
+is the only spelling the toolchain supported today accepts. Everything else
 was identical — the same `fetch_add[ordering=…]`, `load[ordering=…]`,
 `store[ordering=…]` and `fence` calls compile unchanged against any of them.
 The divergence was one type expression and nothing more.
@@ -43,9 +43,8 @@ build says so:
 mojo build … -I src -I compat
 ```
 
-Dropping Mojo 1.0.0 left that directory with one occupant rather than two: 1.2.0
-and the 1.3.0.dev nightlies agree on every spelling here. The seam stays because the
-next divergence is a matter of when, not whether, and re-splitting `compat/` into
+That directory has one occupant, for the one toolchain this tin supports (Mojo
+1.3.0.dev2026111805). The seam stays because the next divergence is a matter of when, not whether, and re-splitting `compat/` into
 one directory per toolchain is then a two-line change in this tin and a path edit
 in each consumer.
 
@@ -70,9 +69,9 @@ detail of it. Two spellings of one alias is the cost of being on the supported
 side of that line, and it is a cost worth paying whether or not the
 undocumented side happens to work this week.
 
-Expect `compat/` to grow again. Stable and nightly diverge as readily as they
-converge, and `async` is the next thing this tin will want that they may well
-spell differently. The pattern to follow is the one here: the divergent file
+Expect `compat/` to grow again. Mojo toolchains diverge as readily as they
+converge, and `async` is the next thing this tin will want that two of them may
+well spell differently. The pattern to follow is the one here: the divergent file
 holds the declaration that differs and nothing whatsoever besides, so that a
 reader can see the entire delta between the two toolchains at a glance and every
 line that actually does work stays single-sourced.
@@ -139,7 +138,7 @@ def atomic_fetch_add(ptr: I64Ptr, delta: Int64) -> Int64:
         The value *before* the addition, so `fetch_add(1)` hands out a unique
         ticket to every caller.
     """
-    return _cell(ptr)[].fetch_add[ordering=Ordering.SEQUENTIAL](delta)
+    return _cell(ptr)[].fetch_add[ordering=Ordering.sequential](delta)
 
 
 @always_inline
@@ -154,7 +153,7 @@ def atomic_load_relaxed(ptr: I64Ptr) -> Int64:
         memory — use `atomic_load_acquire` if you are about to read data that
         another thread published.
     """
-    return _cell(ptr)[].load[ordering=Ordering.RELAXED]()
+    return _cell(ptr)[].load[ordering=Ordering.relaxed]()
 
 
 @always_inline
@@ -168,7 +167,7 @@ def atomic_load_acquire(ptr: I64Ptr) -> Int64:
         The current value. Everything the releasing thread wrote before its
         matching `atomic_store_release` is visible afterwards.
     """
-    return _cell(ptr)[].load[ordering=Ordering.ACQUIRE]()
+    return _cell(ptr)[].load[ordering=Ordering.acquire]()
 
 
 @always_inline
@@ -179,7 +178,7 @@ def atomic_store_relaxed(ptr: I64Ptr, value: Int64):
         ptr: The cell.
         value: The value to write.
     """
-    _cell(ptr)[].store[ordering=Ordering.RELAXED](value)
+    _cell(ptr)[].store[ordering=Ordering.relaxed](value)
 
 
 @always_inline
@@ -193,7 +192,7 @@ def atomic_store_release(ptr: I64Ptr, value: Int64):
         ptr: The cell.
         value: The value to write.
     """
-    _cell(ptr)[].store[ordering=Ordering.RELEASE](value)
+    _cell(ptr)[].store[ordering=Ordering.release](value)
 
 
 @always_inline
@@ -204,13 +203,13 @@ def atomic_fence_acquire():
     `Ordering` the loads and stores take, so these two moved across with the
     rest and no intrinsic is left in this file.
     """
-    fence[ordering=Ordering.ACQUIRE]()
+    fence[ordering=Ordering.acquire]()
 
 
 @always_inline
 def atomic_fence_release():
     """A standalone release fence. See `atomic_fence_acquire`."""
-    fence[ordering=Ordering.RELEASE]()
+    fence[ordering=Ordering.release]()
 
 
 # ── AtomicCounter ────────────────────────────────────────────────────────────

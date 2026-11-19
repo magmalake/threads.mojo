@@ -35,20 +35,20 @@ jobs:
       pull-requests: read
     with:
       # The test legs below are skipped on release PRs; the unit tests run
-      # here instead, in the stable environment a consumer gets.
+      # here instead, in the environment a consumer gets.
       task: test
-      env: stable
+      env: default
+      mojo-compiler: "==1.3.0.dev2026111805"
 
   test:
     needs: release
     if: ${{ !cancelled() && needs.release.outputs.release_only != 'true' }}
-    name: ${{ matrix.env == 'default' && 'nightly' || matrix.env }} / ${{ matrix.os }}
+    name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
-        env: [default, stable]
     steps:
       - uses: actions/checkout@v4
 
@@ -58,53 +58,41 @@ jobs:
           # it hashes source dependencies after it, so a newer pixi rejects the
           # committed lock with "lock file not up-to-date".
           pixi-version: v0.78.0
-          environments: ${{ matrix.env }}
 
       # Every step below goes through a pixi *task* rather than calling `mojo`
       # directly, and that is load-bearing now rather than tidiness: the tasks
-      # spell `-I src -I $THREADS_COMPAT`, and `$THREADS_COMPAT` is set by the
-      # matching feature's `[activation.env]` in pixi.toml. Mojo 1.1.0 and the
-      # 26.7 nightlies accept the same `comptime Cell = Atomic[…]` line, so
-      # both point at plain `compat` today; the indirection is what lets a
-      # future divergence split that directory per toolchain without touching
-      # a task or a step. A step that invoked `mojo build … -I src` by hand
-      # would fail to find `threads_compat` on both legs.
-      #
-      # The nightly leg is also the regression test for the whole reason that
-      # split exists: `[feature.nightly.dependencies]` floors `modular` on the
-      # 26.7 line, well past `26.6.0.dev2026090705`, and the intrinsics this
-      # repo used before could not compile there at all
-      # (modular/modular#7094).
+      # spell `-I src -I $THREADS_COMPAT`, and `$THREADS_COMPAT` is set by
+      # `[activation.env]` in pixi.toml — plain `compat` today; the
+      # indirection is what lets a future divergence split that directory per
+      # toolchain without touching a task or a step. A step that invoked
+      # `mojo build … -I src` by hand would fail to find `threads_compat`.
       #
       # Linux is the interesting leg: pthread_setaffinity_np is a real pin
       # there (a no-op on macOS), and the pthread symbols come out of libc
       # rather than libSystem. Both are exercised by the suite.
       - name: Unit tests
-        run: pixi run -e ${{ matrix.env }} test
+        run: pixi run test
 
-      # Lints `src`, `tests` and this leg's half of `compat` — not all of
-      # `compat`, because `--lsp` type-checks what it lints and the other
-      # half's `Cell` is by construction the spelling this compiler rejects.
-      # Between the two legs both halves are covered.
+      # Lints `src`, `tests` and the `compat` directory `$THREADS_COMPAT`
+      # names — only that one, because `--lsp` type-checks what it lints, and
+      # should `compat` split per toolchain again the other half's `Cell` would
+      # be by construction the spelling this compiler rejects.
       - name: Lint (mojolint --lsp)
-        run: pixi run -e ${{ matrix.env }} lint
+        run: pixi run lint
 
-      # `mojo format` is stricter about `compat/` than mojolint is: it only
-      # parses, so it can check both halves on either toolchain.
+      # `mojo format` covers all of `compat/`: it only parses, so it would
+      # check every half of a split directory on any toolchain.
       - name: Format check
-        run: pixi run -e ${{ matrix.env }} format-check
+        run: pixi run format-check
 
       - name: Demo CLI builds and runs
         run: |
-          pixi run -e ${{ matrix.env }} cli
+          pixi run cli
           ./build/threads-mojo info
           ./build/threads-mojo bench --elements 4000000
 
   # The sanitizer gate. `tests/stress_threads.mojo` is built with a sanitizer
-  # and run in a loop; any finding in the output fails the job. Stable only,
-  # deliberately: nightly here would be a second toolchain's sanitizer runtime
-  # to keep green for no extra signal, and this repo's history with nightly +
-  # pixi-build source deps under pixi 0.78 is not encouraging.
+  # and run in a loop; any finding in the output fails the job.
   #
   # Which sanitizer runs where is decided by the toolchain rather than by
   # preference — see the two comments below. Between them the two platforms
@@ -124,13 +112,12 @@ jobs:
       - uses: prefix-dev/setup-pixi@v0.10.2
         with:
           pixi-version: v0.78.0
-          environments: stable
 
       # Without a sanitizer first, so that a plain wrong answer is
       # distinguishable from a race — and so a sanitizer-only failure is known
       # to be about ordering rather than arithmetic.
       - name: Stress (no sanitizer)
-        run: pixi run -e stable stress
+        run: pixi run stress
 
       # macOS only. On linux-64 with Mojo 1.0.0 a `--sanitize thread` binary
       # links and then aborts before `main`: the runtime's bundled TCMalloc
@@ -140,7 +127,7 @@ jobs:
       # does not help, so it is the toolchain rather than this code.
       - name: Stress under ThreadSanitizer
         if: runner.os == 'macOS'
-        run: pixi run -e stable stress-tsan
+        run: pixi run stress-tsan
 
       # Linux only, and the mirror image: `--sanitize address` does not link on
       # osx-arm64 with this toolchain (undefined
@@ -149,7 +136,7 @@ jobs:
       # included.
       - name: Stress under AddressSanitizer
         if: runner.os == 'Linux'
-        run: pixi run -e stable stress-asan
+        run: pixi run stress-asan
 
   # Imports: no cycles between modules, and each name imported from the
   # module that defines it (github.com/magmalake/customs).

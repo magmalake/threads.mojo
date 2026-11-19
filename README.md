@@ -17,8 +17,8 @@ Mojo code: `parallelize` was removed from `std.algorithm`, and no thread pool
 is reachable from `std`. If you want a second core, you call `pthread_create`
 yourself. This tin is that call, done once, carefully, and tested.
 
-Works on **Mojo 1.2.0 (stable) and current nightly**, on **linux-64** and
-**osx-arm64** — all four combinations in CI.
+Works on **Mojo 1.3.0.dev2026111805** (the nightly every magmalake tin is
+pinned to), on **linux-64** and **osx-arm64** — both in CI.
 
 ## Install
 
@@ -30,7 +30,7 @@ Working with a coding agent? `npx skills add mojoshelf/mojoshelf --skill mojoshe
 
 That resolves the tin from [mojoshelf](https://mojoshelf.org) and adds it — along with the tins it depends on — as **pixi git source dependencies**. magmalake tins are not published to a conda channel, so `pixi add threads-mojo` will not find them.
 
-As a dependency declaration, or for a nightly consumer:
+As a dependency declaration:
 
 ```toml
 # pixi.toml
@@ -304,8 +304,8 @@ section. That is a silent correctness bug rather than a compile error. Use
 
 ## Why this does not just re-export `std.atomic`
 
-It does, now — but it cannot do so from a single file, because the two
-toolchains this tin targets disagree about what `Atomic` is:
+It does, now — but not from a single file, because two toolchains this tin
+has had to support disagree about what `Atomic` is:
 
 | toolchain | declaration | the only spelling it accepts |
 |---|---|---|
@@ -436,11 +436,10 @@ much as anything:
 ## Tests
 
 ```console
-$ pixi run test              # nightly
-$ pixi run -e stable test    # Mojo 1.2.0
+$ pixi run test              # Mojo 1.3.0.dev2026111805
 ```
 
-The tests run on each environment, on both platforms. The load-bearing ones are the
+The tests run on both platforms. The load-bearing ones are the
 races, each written so a broken primitive produces a *wrong number* rather than
 a flake:
 
@@ -454,7 +453,7 @@ a flake:
 - **Allocator under threads** — 8 workers building and dropping Mojo `List`s
   and `String`s concurrently, 64 tasks × 20 rounds each. Every worker in this
   library rests on the Mojo runtime allocator being usable from several threads
-  at once; this test is the evidence, and it passes on all four CI legs.
+  at once; this test is the evidence, and it passes on both CI legs.
 - **`WorkerPool`** — nine tests: workers that tick a shared counter until
   stopped and then join; `request_stop()` racing the spawns; the 16 indices
   each claimed exactly once (a duplicate leaves one slot at 2 and another at
@@ -478,9 +477,9 @@ that happens to interleave benignly on this machine, this run, still passes.
 So the suite has a second half that is a *detector* rather than an assertion.
 
 ```console
-$ pixi run -e stable stress          # no sanitizer, 300 rounds
-$ pixi run -e stable stress-tsan     # --sanitize thread, zero tolerance
-$ pixi run -e stable stress-asan     # --sanitize address, + LeakSanitizer
+$ pixi run stress          # no sanitizer, 300 rounds
+$ pixi run stress-tsan     # --sanitize thread, zero tolerance
+$ pixi run stress-asan     # --sanitize address, + LeakSanitizer
 ```
 
 `tests/stress_threads.mojo` runs the typed and opaque `parallel_for` at 1, 2,
@@ -530,7 +529,7 @@ The threading primitives here are distilled from
 `ThreadHandle` shape, its opaque `pthread_mutex_t` blob, the heap-allocated
 worker context that must outlive the join, and its hard-won note that the
 scheduler's stop flag really wanted to be an atomic. The code is rewritten for
-current Mojo rather than copied: flare pins `mojo==1.0.0b1`, and this tin has
-to compile on both 1.0.0 and nightly.
+current Mojo rather than copied: flare pins `mojo==1.0.0b1`, and this tin is
+pinned to a Mojo 1.3 nightly.
 
 Licensed under the Apache License, Version 2.0 — see `LICENSE` and `NOTICE`.
