@@ -2,7 +2,7 @@
 authors = ["Marius S <39998+winding-lines@users.noreply.github.com>"]
 channels = ["https://conda.modular.com/max-nightly", "conda-forge"]
 name = "threads.mojo"
-version = "0.6.1"
+version = "0.7.0"
 description = "Minimal pthreads for Mojo — spawn/join, atomics, a mutex, parallel_for, and a WorkerPool (typed or untyped). No dependencies."
 preview = ["pixi-build"]
 platforms = ["osx-arm64", "linux-64"]
@@ -60,7 +60,7 @@ format-check = { cmd = "mojo format src tests compat && git diff --exit-code -- 
 # Conda package name is threads-mojo; the Mojo import stays `from threads import …`.
 [package]
 name = "threads-mojo"
-version = "0.6.1"
+version = "0.7.0"
 
 [package.build]
 backend = { name = "pixi-build-mojo", version = "0.*" }
@@ -99,4 +99,4 @@ mojo = "==1.3.0.dev2026111805"
 # Added by `pixi shelf add lint-mojo`: the linter comes from GitHub as a pixi
 # source dependency pinned at the revision mojoshelf published, and builds
 # the `mojolint` executable into every environment next to mojo-lsp-server.
-lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "26bf6963124769c4a42251e911f0fc41e537f0d0" }
+lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "81cac02a78a8cfd48a9807dda68f8d7d2f013791" }

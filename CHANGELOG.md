@@ -10,6 +10,12 @@ whose subject begins with its version).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-20
+
+### Changed
+
+- Pins lint-mojo 0.2.0.
+
 ## [0.6.1] - 2026-10-24
 
 ### Changed
