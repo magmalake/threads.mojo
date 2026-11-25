@@ -78,13 +78,13 @@ name = "threads"
 extra-args = ["-I", "$RECIPE_DIR/compat"]
 
 [package.host-dependencies]
-mojo-compiler = "==1.3.0.dev2026111805"
+mojo-compiler = "==1.3.0.dev2026112505"
 
 [package.build-dependencies]
-mojo-compiler = "==1.3.0.dev2026111805"
+mojo-compiler = "==1.3.0.dev2026112505"
 
 [package.run-dependencies]
-mojo-compiler = "==1.3.0.dev2026111805"
+mojo-compiler = "==1.3.0.dev2026112505"
 
 [activation.env]
 THREADS_COMPAT = "compat"
@@ -95,8 +95,8 @@ THREADS_COMPAT = "compat"
 # it moves across all magmalake tins together. `mojo` rather than just
 # `mojo-compiler`, for the `mojo format` that `fmt` and `format-check` run.
 [dependencies]
-mojo = "==1.3.0.dev2026111805"
+mojo = "==1.3.0.dev2026112505"
 # Added by `pixi shelf add lint-mojo`: the linter comes from GitHub as a pixi
 # source dependency pinned at the revision mojoshelf published, and builds
 # the `mojolint` executable into every environment next to mojo-lsp-server.
-lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "81cac02a78a8cfd48a9807dda68f8d7d2f013791" }
+lint-mojo = { git = "https://github.com/magmalake/lint.mojo.git", rev = "b73d03bbfa458417cf9eed56f4e3b7a092d73969" }
