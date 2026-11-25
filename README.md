@@ -1,6 +1,6 @@
 # threads.mojo
 
-[![mojoshelf](https://mojoshelf.org/badge/threads-mojo.svg)](https://mojoshelf.org/tins/threads-mojo) [![mojo nightly](https://mojoshelf.org/badge/threads-mojo/nightly.svg)](https://mojoshelf.org/tins/threads-mojo)
+[![mojoshelf](https://mojoshelf.org/badge/threads-mojo.svg)](https://mojoshelf.org/tins/threads-mojo) [![mojo nightly](https://mojoshelf.org/badge/threads-mojo/nightly.svg)](https://mojoshelf.org/tins/threads-mojo) [![Used by](https://mojourney.dev/badge/magmalake/threads.mojo/used-by.svg)](https://mojourney.dev/repos/magmalake/threads.mojo#used-by) [![Mojo version](https://mojourney.dev/badge/magmalake/threads.mojo/mojo.svg)](https://mojourney.dev/repos/magmalake/threads.mojo)
 
 [![CI](https://github.com/magmalake/threads.mojo/actions/workflows/ci.yml/badge.svg)](https://github.com/magmalake/threads.mojo/actions/workflows/ci.yml)
 
