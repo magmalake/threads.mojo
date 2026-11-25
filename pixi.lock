@@ -69,7 +69,7 @@ environments:
       - conda: https://conda.modular.com/max-nightly/linux-64/mojo-compiler-1.3.0.dev2026112505-release.conda
       - conda: https://conda.modular.com/max-nightly/noarch/mblack-26.8.0.dev2026112505-release.conda
       - conda: https://conda.modular.com/max-nightly/noarch/mojo-python-1.3.0.dev2026112505-libpython_release.conda
-      - conda_source: lint-mojo[edd581ae] @ git+https://github.com/magmalake/lint.mojo?rev=b73d03bbfa458417cf9eed56f4e3b7a092d73969#b73d03bbfa458417cf9eed56f4e3b7a092d73969
+      - conda_source: lint-mojo[ce296c18] @ git+https://github.com/magmalake/lint.mojo?rev=503a9c6d8fc5114f24a9e3355680a0024167bdb3#503a9c6d8fc5114f24a9e3355680a0024167bdb3
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/noarch/_python_abi3_support-1.0-hd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda
@@ -116,7 +116,7 @@ environments:
       - conda: https://conda.modular.com/max-nightly/noarch/mojo-python-1.3.0.dev2026112505-libpython_release.conda
       - conda: https://conda.modular.com/max-nightly/osx-arm64/mojo-1.3.0.dev2026112505-release.conda
       - conda: https://conda.modular.com/max-nightly/osx-arm64/mojo-compiler-1.3.0.dev2026112505-release.conda
-      - conda_source: lint-mojo[dbe63508] @ git+https://github.com/magmalake/lint.mojo?rev=b73d03bbfa458417cf9eed56f4e3b7a092d73969#b73d03bbfa458417cf9eed56f4e3b7a092d73969
+      - conda_source: lint-mojo[057f880e] @ git+https://github.com/magmalake/lint.mojo?rev=503a9c6d8fc5114f24a9e3355680a0024167bdb3#503a9c6d8fc5114f24a9e3355680a0024167bdb3
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
   build_number: 20
@@ -1376,8 +1376,8 @@ packages:
   run_exports: {}
   size: 58688834
   timestamp: 1795584203386
-- conda_source: lint-mojo[dbe63508] @ git+https://github.com/magmalake/lint.mojo?rev=b73d03bbfa458417cf9eed56f4e3b7a092d73969#b73d03bbfa458417cf9eed56f4e3b7a092d73969
-  version: 0.2.0
+- conda_source: lint-mojo[057f880e] @ git+https://github.com/magmalake/lint.mojo?rev=503a9c6d8fc5114f24a9e3355680a0024167bdb3#503a9c6d8fc5114f24a9e3355680a0024167bdb3
+  version: 0.2.1
   build: h60d57d3_0
   subdir: osx-arm64
   variants:
@@ -1424,8 +1424,8 @@ packages:
   - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
   - conda: https://conda.modular.com/max-nightly/noarch/mojo-python-1.3.0.dev2026112505-libpython_release.conda
   - conda: https://conda.modular.com/max-nightly/osx-arm64/mojo-compiler-1.3.0.dev2026112505-release.conda
-- conda_source: lint-mojo[edd581ae] @ git+https://github.com/magmalake/lint.mojo?rev=b73d03bbfa458417cf9eed56f4e3b7a092d73969#b73d03bbfa458417cf9eed56f4e3b7a092d73969
-  version: 0.2.0
+- conda_source: lint-mojo[ce296c18] @ git+https://github.com/magmalake/lint.mojo?rev=503a9c6d8fc5114f24a9e3355680a0024167bdb3#503a9c6d8fc5114f24a9e3355680a0024167bdb3
+  version: 0.2.1
   build: hb0f4dca_0
   subdir: linux-64
   variants:
