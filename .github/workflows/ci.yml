@@ -38,7 +38,7 @@ jobs:
       # here instead, in the environment a consumer gets.
       task: test
       env: default
-      mojo-compiler: "==1.3.0.dev2026112505"
+      mojo-compiler: "==1.3.0.dev2026112605"
 
   test:
     needs: release
